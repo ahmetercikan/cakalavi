@@ -285,6 +285,35 @@ button:focus-visible,[role="button"]:focus-visible{outline:2px solid var(--teal)
 }
 #prompt small{display:block; font-size:10.5px; color:var(--bone-3); font-family:var(--mono)}
 
+/* ---- etkin görev ve ödül afişi ---- */
+#objective{
+  position:fixed; z-index:20; left:50%; top:calc(58px + env(safe-area-inset-top,0px));
+  transform:translateX(-50%); display:flex; align-items:center; gap:9px;
+  padding:5px 13px 5px 11px; border-radius:999px; pointer-events:none;
+  background:rgba(5,22,32,.6); border:1px solid var(--hair-2); backdrop-filter:blur(8px);
+}
+#objective .eyebrow{
+  font-family:var(--mono); font-size:8.5px; letter-spacing:.2em; text-transform:uppercase;
+  color:var(--teal);
+}
+#objective b{font-size:12px; font-weight:500; color:var(--bone)}
+#banner{
+  position:fixed; z-index:30; left:50%; top:22%; transform:translateX(-50%);
+  display:flex; align-items:center; gap:13px; padding:13px 22px 13px 14px; border-radius:18px;
+  background:linear-gradient(135deg, rgba(14,48,64,.96), rgba(6,24,34,.96));
+  border:1px solid rgba(239,180,85,.45); box-shadow:0 26px 60px -24px #000, 0 0 40px -14px rgba(239,180,85,.5);
+  pointer-events:none; animation:bnr .5s cubic-bezier(.2,1.3,.4,1);
+}
+#banner .ico-wrap{
+  width:40px; height:40px; border-radius:50%; display:grid; place-items:center; flex:0 0 auto;
+  background:rgba(239,180,85,.16); color:var(--brass); border:1px solid rgba(239,180,85,.35);
+}
+#banner .ico-wrap .ico{width:22px; height:22px}
+#banner b{display:block; font-family:var(--display); font-size:17px; font-weight:700}
+#banner small{display:block; font-size:11.5px; color:var(--bone-2); margin-top:2px; font-family:var(--mono)}
+#banner.out{opacity:0; transform:translateX(-50%) translateY(-10px); transition:opacity .5s, transform .5s}
+@keyframes bnr{from{opacity:0; transform:translateX(-50%) scale(.92)}to{opacity:1; transform:translateX(-50%) scale(1)}}
+
 /* ---- ganimet akışı (sağ orta) ---- */
 #feed{
   position:fixed; z-index:22; right:max(12px, env(safe-area-inset-right,0px));
@@ -638,6 +667,9 @@ body.touch #radar{display:none}
   <div class="tape"><div id="tape-in"></div></div>
   <div class="needle"></div>
 </div>
+<div id="objective" hidden><span class="eyebrow">Görev</span><b id="obj-text"></b></div>
+<div id="banner" hidden><span class="ico-wrap"><svg class="ico"><use href="#i-star"/></svg></span>
+  <span><b id="banner-t"></b><small id="banner-s"></small></span></div>
 
 <div class="hud" id="hud-tl">
   <div class="pane ident">
@@ -1134,37 +1166,67 @@ const blocked = (buf, x, z) => {
   return i < 0 || j < 0 || i >= BGW || j >= BGH ? true : buf[j*BGW+i] === 1;
 };
 
-function ribbon(pts, width, lift, pos, col, color, idx, jitter){
-  const n = pts.length;
-  if(n < 2) return;
-  const half = width/2;
-  const left = [], right = [];
-  for(let i = 0; i < n; i++){
-    const p = pts[i];
-    const a = pts[Math.max(0, i-1)], b = pts[Math.min(n-1, i+1)];
-    let tx = b[0]-a[0], tz = b[1]-a[1];
-    const L = Math.hypot(tx, tz) || 1; tx /= L; tz /= L;
-    const nx = -tz, nz = tx;
-    const y = terrainH(p[0], p[1]) + lift;
-    left.push([p[0]+nx*half, y, p[1]+nz*half]);
-    right.push([p[0]-nx*half, y, p[1]-nz*half]);
+/* ---- yol kaplaması ----
+   Eski şerit, çizgi noktalarını seyrek örneklediği için eğimli yerlerde havada kalıyordu.
+   Yeni kurgu: merkez çizgi 1,6 m'de bir örneklenir, her kesitin yüksekliği iki kenarın
+   arazi kotundan yükseği alınır, kenarlara da toprağa gömülen bir etek (perde) inilir.  */
+function resample(pts, step){
+  const out = [pts[0]];
+  for(let i = 0; i < pts.length-1; i++){
+    const a = pts[i], b = pts[i+1];
+    const L = Math.hypot(b[0]-a[0], b[1]-a[1]);
+    const n = Math.max(1, Math.ceil(L/step));
+    for(let k = 1; k <= n; k++) out.push([a[0] + (b[0]-a[0])*k/n, a[1] + (b[1]-a[1])*k/n]);
   }
-  const base = pos.length/3;
+  return out;
+}
+function sideNormals(pts){
+  const nn = [];
+  for(let i = 0; i < pts.length; i++){
+    const a = pts[Math.max(0, i-1)], b = pts[Math.min(pts.length-1, i+1)];
+    let tx = b[0]-a[0], tz = b[1]-a[1];
+    const L = Math.hypot(tx, tz) || 1;
+    nn.push([-tz/L, tx/L]);
+  }
+  return nn;
+}
+/* iki yanal ofset arasında, araziyi izleyen yatay şerit */
+function strip(pts, nn, o0, o1, lift, P_, C_, I_, color, jitter){
+  const base = P_.length/3, n = pts.length;
   for(let i = 0; i < n; i++){
-    pos.push(left[i][0], left[i][1], left[i][2]);
-    pos.push(right[i][0], right[i][1], right[i][2]);
-    const s = jitter ? (0.93 + ((i*37)%11)/11*0.14) : 1;
-    col.push(color.r*s, color.g*s, color.b*s, color.r*s, color.g*s, color.b*s);
+    const p = pts[i], nx = nn[i][0], nz = nn[i][1];
+    const ax = p[0] + nx*o0, az = p[1] + nz*o0;
+    const bx = p[0] + nx*o1, bz = p[1] + nz*o1;
+    const y = Math.max(terrainH(ax, az), terrainH(bx, bz)) + lift;
+    P_.push(ax, y, az, bx, y, bz);
+    const s = jitter ? (0.9 + ((i*37)%13)/13*0.19) : 1;
+    C_.push(color.r*s, color.g*s, color.b*s, color.r*s, color.g*s, color.b*s);
   }
   for(let i = 0; i < n-1; i++){
     const a = base+i*2, b = a+1, c = a+2, d = a+3;
-    idx.push(a, c, b, b, c, d);
+    I_.push(a, c, b, b, c, d);
+  }
+}
+/* kenarda aşağı inen dikey perde — kaplamanın altında boşluk görünmesin */
+function curtain(pts, nn, off, topLift, depth, P_, C_, I_, color){
+  const base = P_.length/3, n = pts.length;
+  for(let i = 0; i < n; i++){
+    const p = pts[i], x = p[0] + nn[i][0]*off, z = p[1] + nn[i][1]*off;
+    const y = terrainH(x, z) + topLift;
+    P_.push(x, y, z, x, y - depth, z);
+    C_.push(color.r, color.g, color.b, color.r*0.72, color.g*0.72, color.b*0.72);
+  }
+  for(let i = 0; i < n-1; i++){
+    const a = base+i*2, b = a+1, c = a+2, d = a+3;
+    I_.push(a, c, b, b, c, d);
   }
 }
 
-const C_PAVER = new THREE.Color(0xd8d2c4);
+const C_PAVER = new THREE.Color(0xd2cabb);
 const C_BAND  = new THREE.Color(0xc08b6c);
-const C_KERB  = new THREE.Color(0xbdb49f);
+const C_KERB  = new THREE.Color(0xcfc8b8);
+const C_EDGE  = new THREE.Color(0xa89f8c);
+const C_WALL  = new THREE.Color(0xb3a894);
 const rP = [], rC = [], rI = [];
 const bP = [], bC = [], bI = [];
 const kP = [], kC = [], kI = [];
@@ -1172,42 +1234,59 @@ const streetGroups = new Map();
 const lampSpots = [];
 
 for(const r of W.roads){
-  const pts = r.pts.map(p => [px2x(p[0]), pz2z(p[1])]);
+  const raw = r.pts.map(p => [px2x(p[0]), pz2z(p[1])]);
+  if(raw.length < 2) continue;
+  const pts = resample(raw, 1.6);
+  const nn = sideNormals(pts);
   const wm = Math.max(3.0, r.width * S);
-  ribbon(pts, wm + 2.4, 0.07, kP, kC, C_KERB, kI, false);
-  ribbon(pts, wm, 0.14, rP, rC, C_PAVER, rI, true);
-  if(wm > 5.6) ribbon(pts, wm*0.16, 0.17, bP, bC, C_BAND, bI, true);
+  const hw = wm/2;
+  const wide = wm > 5.6;
+
+  /* kaplama */
+  strip(pts, nn, -hw, hw, 0.055, rP, rC, rI, C_PAVER, true);
+  /* orta kiremit şerit */
+  if(wide) strip(pts, nn, -hw*0.16, hw*0.16, 0.075, bP, bC, bI, C_BAND, true);
+  /* bordür + etek */
+  for(const sgn of [-1, 1]){
+    const o = sgn*hw;
+    strip(pts, nn, o, o + sgn*(wide ? 0.6 : 0.35), 0.17, kP, kC, kI, C_KERB, false);
+    curtain(pts, nn, o, 0.17, 0.16, kP, kC, kI, C_EDGE);
+    curtain(pts, nn, o + sgn*(wide ? 0.6 : 0.35), 0.17, 0.75, kP, kC, kI, C_WALL);
+  }
 
   let acc = 0;
-  for(let i = 0; i < pts.length-1; i++){
-    const seg = Math.hypot(pts[i+1][0]-pts[i][0], pts[i+1][1]-pts[i][1]);
+  for(let i = 0; i < raw.length-1; i++){
+    const seg = Math.hypot(raw[i+1][0]-raw[i][0], raw[i+1][1]-raw[i][1]);
     const steps = Math.max(1, Math.ceil(seg/1.5));
     for(let k = 0; k <= steps; k++){
-      const x = pts[i][0] + (pts[i+1][0]-pts[i][0])*k/steps;
-      const z = pts[i][1] + (pts[i+1][1]-pts[i][1])*k/steps;
-      stamp(blockRoad, x, z, wm/2 + 1.6);
+      const x = raw[i][0] + (raw[i+1][0]-raw[i][0])*k/steps;
+      const z = raw[i][1] + (raw[i+1][1]-raw[i][1])*k/steps;
+      stamp(blockRoad, x, z, hw + 1.6);
     }
     if(wm >= 6){
       acc += seg;
       if(acc > 38){
         acc = 0;
-        const tx = (pts[i+1][0]-pts[i][0])/seg, tz = (pts[i+1][1]-pts[i][1])/seg;
-        lampSpots.push([pts[i][0] - tz*(wm/2+0.9), pts[i][1] + tx*(wm/2+0.9)]);
+        const tx = (raw[i+1][0]-raw[i][0])/seg, tz = (raw[i+1][1]-raw[i][1])/seg;
+        lampSpots.push([raw[i][0] - tz*(hw+0.9), raw[i][1] + tx*(hw+0.9)]);
       }
     }
   }
   if(r.name){
     const key = r.name + '#' + (r.lid ?? 0);
     const g = streetGroups.get(key) || { x:0, z:0, n:0, name:r.name };
-    for(const p of pts){ g.x += p[0]; g.z += p[1]; g.n++; }
+    for(const p of raw){ g.x += p[0]; g.z += p[1]; g.n++; }
     streetGroups.set(key, g);
   }
 }
 const paveTex = grainTexture(256, 1, 0.82, 1.0, 1400);
-paveTex.repeat.set(1, 1);
-scene.add(meshFrom(kP, kC, kI, new THREE.MeshStandardMaterial({ vertexColors:true, roughness:1, map:paveTex }), false, 1.4));
-scene.add(meshFrom(rP, rC, rI, new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.92, map:paveTex }), false, 1.4));
-scene.add(meshFrom(bP, bC, bI, new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.92, map:paveTex }), false, 1.4));
+const roadMat = new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.95, map:paveTex,
+                                                 envMapIntensity:0.22, side:THREE.DoubleSide });
+const kerbMat = new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.98, map:paveTex,
+                                                 envMapIntensity:0.2, side:THREE.DoubleSide });
+scene.add(meshFrom(kP, kC, kI, kerbMat, false, 1.0));
+scene.add(meshFrom(rP, rC, rI, roadMat, false, 1.0));
+scene.add(meshFrom(bP, bC, bI, roadMat, false, 1.0));
 
 /* ---------------- evler ----------------
    Street View referansı: krem sıva, kiremit kırma çatı, beyaz denizlik, taş bahçe duvarı */
@@ -2141,50 +2220,129 @@ const JUNK = ['terlik','sise','anahtar','kgozluk'];
 
 function lootGeo(id){
   const C = h => new THREE.Color(h);
+  const parts = [], cols = [];
+  const add = (g, c) => { parts.push(g); cols.push(C(c)); };
+
   if(id === 'kabuk'){
-    const d = new THREE.SphereGeometry(0.20, 10, 5, 0, Math.PI*2, 0, Math.PI/2);
-    d.scale(1, 0.5, 0.85);
-    const r = new THREE.ConeGeometry(0.07, 0.12, 6); r.rotateX(Math.PI/2); r.translate(0, 0.02, -0.19);
-    return mergeSimple([d, r], [C(0xf4e6d2), C(0xe6d2b4)]);
+    /* tarak kabuğu: kubbe + ışınsal kaburgalar + menteşe */
+    const dome = new THREE.SphereGeometry(0.2, 16, 8, 0, Math.PI*2, 0, Math.PI/2);
+    dome.scale(1, 0.42, 0.88); add(dome, 0xf6ead6);
+    for(let i = 0; i < 9; i++){
+      const a = -Math.PI/2 + (i/8)*Math.PI;
+      const rib = new THREE.CapsuleGeometry(0.012, 0.17, 3, 6);
+      rib.rotateZ(Math.PI/2); rib.rotateY(a);
+      rib.translate(Math.sin(a)*0.085, 0.055, Math.cos(a)*0.075 - 0.02);
+      add(rib, i%2 ? 0xe8d6bb : 0xf2e2ca);
+    }
+    const hinge = new THREE.CylinderGeometry(0.035, 0.055, 0.05, 8);
+    hinge.rotateX(Math.PI/2); hinge.translate(0, 0.03, 0.17);
+    add(hinge, 0xdfc8a8);
+    const lip = new THREE.TorusGeometry(0.185, 0.012, 6, 18, Math.PI);
+    lip.rotateX(Math.PI/2); lip.scale(1, 1, 0.88); lip.translate(0, 0.02, 0);
+    add(lip, 0xeaddc4);
+    return mergeSimple(parts, cols);
   }
   if(id === 'salyangoz'){
-    const s = new THREE.SphereGeometry(0.15, 9, 7); s.scale(1, 0.85, 1); s.translate(0, 0.12, 0);
-    const t = new THREE.ConeGeometry(0.09, 0.2, 7); t.rotateZ(-0.7); t.translate(0.13, 0.17, 0);
-    return mergeSimple([s, t], [C(0xd9b988), C(0xc2a070)]);
+    /* sarmal: küçülen küreler logaritmik spiral üzerinde */
+    for(let i = 0; i < 7; i++){
+      const t = i/6;
+      const r = 0.085*(1 - t*0.72);
+      const a = t*5.6;
+      const sp = new THREE.SphereGeometry(r, 10, 8);
+      sp.translate(Math.cos(a)*0.075*(1-t*0.6), 0.07 + t*0.1, Math.sin(a)*0.075*(1-t*0.6));
+      add(sp, i%2 ? 0xdcbd92 : 0xc8a473);
+    }
+    const mouth = new THREE.ConeGeometry(0.07, 0.11, 10, 1, true);
+    mouth.rotateX(1.3); mouth.translate(0.04, 0.05, -0.08);
+    add(mouth, 0xf0e0c6);
+    return mergeSimple(parts, cols);
   }
   if(id === 'tas'){
-    const a = new THREE.IcosahedronGeometry(0.17, 0); a.scale(1, 0.72, 1.1); a.translate(0, 0.11, 0);
-    return mergeSimple([a], [C(0x9c8f7a)]);
+    const a = new THREE.DodecahedronGeometry(0.16, 0);
+    a.scale(1, 0.72, 1.08); a.translate(0, 0.1, 0); add(a, 0x9c8f7a);
+    const b = new THREE.DodecahedronGeometry(0.075, 0);
+    b.translate(0.1, 0.07, -0.06); add(b, 0x8d8372);
+    for(let i = 0; i < 3; i++){
+      const v = new THREE.OctahedronGeometry(0.028, 0);
+      v.translate(-0.05 + i*0.06, 0.16 - (i%2)*0.04, 0.03 - i*0.04);
+      add(v, i%2 ? 0xd8cdae : 0xb9c9cc);
+    }
+    return mergeSimple(parts, cols);
   }
   if(id === 'mineral'){
-    const a = new THREE.OctahedronGeometry(0.17, 0); a.translate(0, 0.16, 0);
-    const b = new THREE.OctahedronGeometry(0.1, 0); b.translate(0.13, 0.09, 0.05);
-    return mergeSimple([a, b], [C(0x72d6e2), C(0x9ae6ee)]);
+    /* kristal kümesi: altıgen prizmalar + sivri uçlar */
+    const spots = [[0, 0, 0, 1], [0.1, 0, 0.05, 0.62], [-0.08, 0, 0.07, 0.5], [0.03, 0, -0.1, 0.44]];
+    for(const [x, , z, sc] of spots){
+      const h = 0.26*sc;
+      const pr = new THREE.CylinderGeometry(0.055*sc, 0.06*sc, h, 6);
+      pr.translate(x, h/2, z); add(pr, 0x72d6e2);
+      const tip = new THREE.ConeGeometry(0.056*sc, 0.1*sc, 6);
+      tip.translate(x, h + 0.05*sc, z); add(tip, 0x9ae8f0);
+    }
+    const base = new THREE.DodecahedronGeometry(0.1, 0);
+    base.scale(1, 0.4, 1); base.translate(0, 0.03, 0); add(base, 0x7e8a86);
+    return mergeSimple(parts, cols);
   }
   if(id === 'cam'){
-    const a = new THREE.BoxGeometry(0.2, 0.05, 0.15); a.translate(0, 0.04, 0);
-    const b = new THREE.BoxGeometry(0.1, 0.05, 0.1); b.rotateY(0.6); b.translate(0.11, 0.04, 0.06);
-    return mergeSimple([a, b], [C(0x8fd6c0), C(0xa9e3d2)]);
+    for(let i = 0; i < 3; i++){
+      const sh = new THREE.IcosahedronGeometry(0.075 - i*0.016, 0);
+      sh.scale(1.5, 0.42, 1.2);
+      sh.rotateY(i*1.3); sh.translate(-0.05 + i*0.07, 0.03, 0.04 - i*0.05);
+      add(sh, i === 0 ? 0x8fd6c0 : i === 1 ? 0xb3e4d6 : 0x7fc7e0);
+    }
+    return mergeSimple(parts, cols);
   }
   if(id === 'terlik'){
-    const s = new THREE.BoxGeometry(0.3, 0.045, 0.13); s.translate(0, 0.03, 0);
-    const b = new THREE.TorusGeometry(0.06, 0.016, 5, 9); b.rotateY(Math.PI/2); b.translate(-0.04, 0.07, 0);
-    return mergeSimple([s, b], [C(0x3f74ad), C(0x2d5c8c)]);
+    const sole = new THREE.SphereGeometry(1, 14, 10);
+    sole.scale(0.07, 0.022, 0.16); sole.translate(0, 0.025, 0); add(sole, 0x3f74ad);
+    const top = new THREE.SphereGeometry(1, 14, 10);
+    top.scale(0.062, 0.012, 0.15); top.translate(0, 0.04, 0); add(top, 0x5b92c8);
+    for(const sx of [-1, 1]){
+      const st = new THREE.CapsuleGeometry(0.011, 0.085, 3, 6);
+      st.rotateX(1.1); st.rotateZ(sx*0.5); st.translate(sx*0.03, 0.055, 0.035);
+      add(st, 0x2d5c8c);
+    }
+    const post = new THREE.CylinderGeometry(0.009, 0.009, 0.03, 6);
+    post.translate(0, 0.05, -0.085); add(post, 0x2d5c8c);
+    const hole = new THREE.TorusGeometry(0.018, 0.005, 5, 10);
+    hole.rotateX(Math.PI/2); hole.translate(0.02, 0.048, 0.06); add(hole, 0x24486e);
+    return mergeSimple(parts, cols);
   }
   if(id === 'sise'){
-    const c = new THREE.CylinderGeometry(0.055, 0.06, 0.24, 8); c.translate(0, 0.12, 0);
-    const n = new THREE.CylinderGeometry(0.025, 0.045, 0.08, 7); n.translate(0, 0.27, 0);
-    return mergeSimple([c, n], [C(0x77b06a), C(0x8cc47c)]);
+    const body = new THREE.LatheGeometry([[0.001,0],[0.056,0.008],[0.058,0.17],[0.046,0.21],
+      [0.024,0.245],[0.022,0.31],[0.001,0.312]].map(q => new THREE.Vector2(q[0], q[1])), 12);
+    add(body, 0x77b06a);
+    const label = new THREE.CylinderGeometry(0.06, 0.06, 0.075, 12, 1, true);
+    label.translate(0, 0.1, 0); add(label, 0xe8dfc8);
+    const cap = new THREE.CylinderGeometry(0.025, 0.025, 0.016, 10);
+    cap.translate(0, 0.318, 0); add(cap, 0xc9b06a);
+    return mergeSimple(parts, cols);
   }
   if(id === 'anahtar'){
-    const r = new THREE.TorusGeometry(0.05, 0.015, 5, 10); r.rotateX(Math.PI/2); r.translate(0, 0.02, -0.07);
-    const s = new THREE.BoxGeometry(0.022, 0.02, 0.16); s.translate(0, 0.02, 0.04);
-    return mergeSimple([r, s], [C(0xa87a46), C(0xb98a52)]);
+    const r = new THREE.TorusGeometry(0.048, 0.014, 6, 14);
+    r.rotateX(Math.PI/2); r.translate(0, 0.018, -0.075); add(r, 0xa87a46);
+    const sh = new THREE.CylinderGeometry(0.012, 0.012, 0.17, 8);
+    sh.rotateX(Math.PI/2); sh.translate(0, 0.018, 0.03); add(sh, 0xb98a52);
+    for(let i = 0; i < 2; i++){
+      const t = new THREE.BoxGeometry(0.008, 0.03, 0.016);
+      t.translate(0.014, 0.03, 0.08 + i*0.028); add(t, 0xa87a46);
+    }
+    return mergeSimple(parts, cols);
   }
-  const l = new THREE.TorusGeometry(0.055, 0.013, 5, 10); l.rotateX(Math.PI/2); l.translate(-0.07, 0.02, 0);
-  const r2 = new THREE.TorusGeometry(0.055, 0.013, 5, 10); r2.rotateX(Math.PI/2); r2.translate(0.07, 0.02, 0);
-  const br = new THREE.BoxGeometry(0.06, 0.012, 0.012); br.translate(0, 0.02, 0);
-  return mergeSimple([l, r2, br], [C(0x33333d), C(0x33333d), C(0x4a4a56)]);
+  /* kırık güneş gözlüğü */
+  for(const sx of [-1, 1]){
+    const rim = new THREE.TorusGeometry(0.055, 0.011, 6, 14);
+    rim.rotateX(Math.PI/2); rim.translate(sx*0.065, 0.016, 0); add(rim, 0x33333d);
+    const lens = new THREE.CircleGeometry(0.05, 12);
+    lens.rotateX(-Math.PI/2); lens.translate(sx*0.065, 0.018, 0); add(lens, 0x4e5b66);
+  }
+  const bridge = new THREE.BoxGeometry(0.055, 0.009, 0.012);
+  bridge.translate(0, 0.018, 0); add(bridge, 0x33333d);
+  const arm = new THREE.BoxGeometry(0.012, 0.009, 0.1);
+  arm.rotateY(0.25); arm.translate(-0.11, 0.018, 0.06); add(arm, 0x3d3d48);
+  const broken = new THREE.BoxGeometry(0.012, 0.009, 0.04);
+  broken.rotateY(-0.5); broken.rotateX(0.4); broken.translate(0.12, 0.012, 0.05); add(broken, 0x3d3d48);
+  return mergeSimple(parts, cols);
 }
 
 /* ---------- kumsal maskesi (kabuklar kumda, mineral kayada) ---------- */
@@ -2246,7 +2404,7 @@ const dummy2 = new THREE.Object3D();
       loot.push(o);
       dummy2.position.set(d.x, y, d.z);
       dummy2.rotation.set(0, o.rot, 0);
-      dummy2.scale.setScalar(1.25 + rand()*0.6);
+      dummy2.scale.setScalar(1.1 + rand()*0.5);
       dummy2.updateMatrix(); im.setMatrixAt(k, dummy2.matrix);
     });
     for(let k = 0; k < spare; k++){
@@ -2285,7 +2443,7 @@ function dropLoot(id, x, z){
   if(slot === undefined) return;
   const o = { id, slot, x, z, y:Math.max(terrainH(x, z), -8) + 0.02, water:terrainH(x, z) < 0,
               alive:true, t:0, rot:rand()*6.28, home:false };
-  loot.push(o); gridAdd(o); setLoot(o, 1.45);
+  loot.push(o); gridAdd(o); setLoot(o, 1.3);
 }
 
 /* ---------- karakterler ----------
@@ -2307,13 +2465,33 @@ function lathe(profile, mat, seg){
   g.computeVertexNormals();
   return new THREE.Mesh(g, mat);
 }
-/* kök noktası üstte, aşağı doğru uzayan konik uzuv + küre eklemler */
+/* uzuv: kök üstte, aşağı uzanan tek parça yüzey.
+   Silindir + küre yığını yerine dönel profil kullanıyoruz; eklem yerlerinde
+   dikiş görünmüyor, ortadaki hafif şişkinlik kas hissi veriyor.            */
+const limbCache = new Map();
 function bone(rTop, rBot, len, mat){
+  const key = rTop.toFixed(3) + ':' + rBot.toFixed(3) + ':' + len.toFixed(3);
+  let geo = limbCache.get(key);
+  if(!geo){
+    const rMid = Math.max(rTop, rBot)*1.07;
+    const prof = [];
+    const CAP = 4;
+    for(let i = CAP; i >= 0; i--){          /* üst yarım küre */
+      const a = i/CAP*Math.PI/2;
+      prof.push([Math.cos(a)*rTop, Math.sin(a)*rTop*0.85]);
+    }
+    prof.push([rMid, -len*0.42]);
+    prof.push([rBot*1.04, -len*0.82]);
+    for(let i = 0; i <= CAP; i++){          /* alt yarım küre */
+      const a = i/CAP*Math.PI/2;
+      prof.push([Math.cos(a)*rBot, -len - Math.sin(a)*rBot*0.85]);
+    }
+    geo = new THREE.LatheGeometry(prof.map(q => new THREE.Vector2(Math.max(0.0001, q[0]), q[1])), 16);
+    geo.computeVertexNormals();
+    limbCache.set(key, geo);
+  }
   const g = new THREE.Group();
-  const c = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, len, 14, 1, true), mat);
-  c.position.y = -len/2; g.add(c);
-  const a = new THREE.Mesh(new THREE.SphereGeometry(rTop, 14, 10), mat); g.add(a);
-  const b = new THREE.Mesh(new THREE.SphereGeometry(rBot, 14, 10), mat); b.position.y = -len; g.add(b);
+  g.add(new THREE.Mesh(geo, mat));
   return g;
 }
 /* ayağın altındaki yumuşak temas gölgesi */
@@ -2348,7 +2526,7 @@ function makeHand(mat, s){
    İskelet: kalça → omurga → göğüs → boyun → baş, kalça → uyluk → baldır → ayak.
    Dizler geriye, dirsekler öne bükülür; ayak bileği adım fazına göre döner. */
 const KID = {
-  hip:0.76, spine:0.07, chest:0.09, shoulderY:0.17, shoulderX:0.148,
+  hip:0.76, spine:0.07, chest:0.09, shoulderY:0.162, shoulderX:0.124,
   thigh:0.36, shin:0.33, upperArm:0.25, foreArm:0.23, headY:0.375, headR:0.107,
 };
 
@@ -2370,7 +2548,7 @@ function makeKid(cfg){
   /* --- gövde --- */
   const spine = new THREE.Group(); spine.position.y = KID.spine; hips.add(spine);
   const chest = new THREE.Group(); chest.position.y = KID.chest; spine.add(chest);
-  const torso = lathe([[0.004,-0.17],[0.1,-0.166],[0.112,-0.1],[0.121,-0.02],[0.124,0.06],[0.118,0.13],[0.095,0.175],[0.05,0.192],[0.004,0.194]], shirt, 22);
+  const torso = lathe([[0.004,-0.17],[0.1,-0.166],[0.112,-0.1],[0.122,-0.02],[0.128,0.06],[0.127,0.13],[0.104,0.178],[0.055,0.194],[0.004,0.196]], shirt, 22);
   torso.scale.z = 0.78; chest.add(torso);
   const collar = new THREE.Mesh(new THREE.TorusGeometry(0.044, 0.01, 8, 18), trim);
   collar.rotation.x = Math.PI/2; collar.position.y = 0.19; collar.scale.z = 0.92; chest.add(collar);
@@ -2450,13 +2628,13 @@ function makeKid(cfg){
   /* --- kollar --- */
   const arm = s => {
     const g = new THREE.Group(); g.position.set(s*KID.shoulderX, KID.shoulderY, 0); chest.add(g);
-    const sh = new THREE.Mesh(new THREE.SphereGeometry(0.052, 16, 12), shirt);
-    sh.scale.set(1, 0.98, 0.94); g.add(sh);
-    const slv = new THREE.Mesh(new THREE.CylinderGeometry(0.049, 0.042, 0.1, 14), sleeveM);
-    slv.position.y = -0.05; g.add(slv);
-    g.add(bone(0.036, 0.029, KID.upperArm, skin));
+    /* tişört kolu: omuzdan aşağı hafif açılan kumaş, üstü yuvarlak kapalı */
+    const slv = lathe([[0.002,0.052],[0.028,0.06],[0.042,0.042],[0.046,-0.01],[0.047,-0.075],
+                       [0.044,-0.125],[0.002,-0.128]], sleeveM, 16);
+    slv.scale.z = 0.94; g.add(slv);
+    g.add(bone(0.0385, 0.031, KID.upperArm, skin));
     const lo = new THREE.Group(); lo.position.y = -KID.upperArm; g.add(lo);
-    lo.add(bone(0.029, 0.023, KID.foreArm, skin));
+    lo.add(bone(0.0315, 0.0245, KID.foreArm, skin));
     const hand = makeHand(skin, s); hand.position.y = -KID.foreArm - 0.004; lo.add(hand);
     return { g, lo, hand };
   };
@@ -2469,41 +2647,64 @@ function makeKid(cfg){
     const lo = new THREE.Group(); lo.position.y = -KID.thigh; g.add(lo);
     lo.add(bone(0.039, 0.027, KID.shin, skin));
     const foot = new THREE.Group(); foot.position.y = -KID.shin; lo.add(foot);
-    /* ayak: topuk + taban + parmaklar, sandalet tabanı üstte */
-    const heel = new THREE.Mesh(new THREE.SphereGeometry(0.032, 12, 9), skin);
-    heel.scale.set(1, 0.85, 1); heel.position.set(0, 0.0, 0.022); foot.add(heel);
-    const sole = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 11), mkMat(cfg.shoe || 0xf0eadb, 0.92));
-    sole.scale.set(0.039, 0.015, 0.095); sole.position.set(0, -0.016, -0.038); foot.add(sole);
-    const inst = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), skin);
-    inst.scale.set(0.033, 0.026, 0.075); inst.position.set(0, 0.008, -0.028); foot.add(inst);
-    const toes = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 9), skin);
-    toes.scale.set(0.031, 0.018, 0.026); toes.position.set(0, -0.002, -0.106); foot.add(toes);
-    const strap = new THREE.Mesh(new THREE.TorusGeometry(0.028, 0.0075, 7, 14), mkMat(cfg.strap || 0xd9cbb2, 0.88));
-    strap.position.set(0, 0.004, -0.05); strap.scale.set(1.15, 0.85, 1); foot.add(strap);
-    const strap2 = new THREE.Mesh(new THREE.TorusGeometry(0.024, 0.0065, 7, 14), mkMat(cfg.strap || 0xd9cbb2, 0.88));
-    strap2.rotation.y = Math.PI/2; strap2.position.set(0, -0.004, -0.082); strap2.scale.set(1, 0.7, 1.3); foot.add(strap2);
+    /* spor ayakkabı: taban, burun kapağı, bilek yakası, bağcık */
+    const shoeM = mkMat(cfg.shoe || 0xf2efe6, 0.78), soleM = mkMat(cfg.sole || 0xe2ded3, 0.95);
+    const upper = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), shoeM);
+    upper.scale.set(0.038, 0.032, 0.088); upper.position.set(0, 0.012, -0.034); foot.add(upper);
+    const sole = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 11), soleM);
+    sole.scale.set(0.042, 0.016, 0.098); sole.position.set(0, -0.012, -0.034); foot.add(sole);
+    const toeCap = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), soleM);
+    toeCap.scale.set(0.036, 0.024, 0.03); toeCap.position.set(0, 0.002, -0.1); foot.add(toeCap);
+    const tongue = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.012, 0.05), shoeM);
+    tongue.position.set(0, 0.036, -0.022); tongue.rotation.x = 0.25; foot.add(tongue);
+    for(let i = 0; i < 2; i++){
+      const lace = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.005, 0.006), mkMat(cfg.lace || 0xcfc6b4, 0.9));
+      lace.position.set(0, 0.04 - i*0.008, -0.012 - i*0.022); lace.rotation.x = 0.2; foot.add(lace);
+    }
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.008, 7, 14), shoeM);
+    collar.rotation.x = Math.PI/2 - 0.2; collar.position.set(0, 0.04, 0.012); collar.scale.set(1.1, 1, 0.9); foot.add(collar);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.02, 0.05), mkMat(cfg.strap || 0x3ad0c4, 0.8));
+    stripe.position.set(0.034, 0.012, -0.03); stripe.rotation.z = 0.2; foot.add(stripe);
+    const stripe2 = stripe.clone(); stripe2.position.x = -0.034; stripe2.rotation.z = -0.2; foot.add(stripe2);
     return { g, lo, foot };
   };
   const armL = arm(-1), armR = arm(1), legL = leg(-1), legR = leg(1);
 
-  /* --- file çanta --- */
-  const pack = new THREE.Group(); pack.position.set(0, 0.02, 0.1); chest.add(pack);
-  const sack = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 12), mkMat(0x3f6b52, 0.95));
-  sack.scale.set(1.05, 1.22, 0.6); pack.add(sack);
+  /* --- sırt çantası: hep takılı; file çanta alınınca yanına ganimet filesi gelir --- */
+  const packM = mkMat(cfg.pack || 0x3f6b52, 0.92), packD = mkMat(cfg.packD || 0x2f5240, 0.92);
+  const day = new THREE.Group(); day.position.set(0, 0.03, 0.082); chest.add(day);
+  const sack = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 14), packM);
+  sack.scale.set(0.105, 0.135, 0.058); day.add(sack);
+  const flap = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 12, 0, 6.283, 0, 1.1), packD);
+  flap.scale.set(0.108, 0.1, 0.062); flap.position.y = 0.055; day.add(flap);
+  const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.016, 0.01), mkMat(cfg.trim || 0xf6ecd9, 0.6));
+  buckle.position.set(0, 0.012, -0.055); day.add(buckle);
+  const pocket = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 9), packD);
+  pocket.scale.set(0.034, 0.05, 0.03); pocket.position.set(0.095, -0.02, 0.01); day.add(pocket);
+  const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.07, 10), mkMat(0x6fc4d6, 0.5));
+  bottle.position.set(0.095, 0.035, 0.01); day.add(bottle);
+  for(const sx of [-1, 1]){
+    const strap = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.011, 8, 18, Math.PI*0.95), packD);
+    strap.position.set(sx*0.062, 0.04, -0.015);
+    strap.rotation.set(0.12, sx*0.55, 0); day.add(strap);
+  }
+
+  /* --- file çanta (yükseltme) --- */
+  const pack = new THREE.Group(); pack.position.set(0.12, -0.08, 0.02); chest.add(pack);
+  const net = new THREE.Mesh(new THREE.SphereGeometry(0.085, 14, 11), mkMat(0x87b196, 0.95));
+  net.scale.set(1, 1.2, 0.8); pack.add(net);
   for(let i = 0; i < 3; i++){
-    const r = new THREE.Mesh(new THREE.TorusGeometry(0.088 - i*0.013, 0.0045, 6, 18), mkMat(0x87b196, 0.9));
-    r.rotation.x = Math.PI/2; r.position.y = -0.045 + i*0.045; r.scale.z = 0.6; pack.add(r);
+    const r = new THREE.Mesh(new THREE.TorusGeometry(0.078 - i*0.012, 0.004, 6, 16), mkMat(0x5d8c72, 0.9));
+    r.rotation.x = Math.PI/2; r.position.y = -0.04 + i*0.04; r.scale.z = 0.8; pack.add(r);
   }
-  for(const s of [-1, 1]){
-    const strap = new THREE.Mesh(new THREE.TorusGeometry(0.072, 0.008, 6, 16, Math.PI*0.8), mkMat(0x2f5240, 0.9));
-    strap.position.set(s*0.062, 0.05, -0.055); strap.rotation.set(0.1, s*0.6, 0); pack.add(strap);
-  }
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.006, 6, 14, Math.PI), mkMat(0x5d8c72, 0.9));
+  handle.position.y = 0.09; pack.add(handle);
   pack.visible = false;
 
   G.traverse(o => { if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
   G.children[0].castShadow = false; G.children[0].receiveShadow = false;
   G.scale.setScalar(cfg.scale || 1);
-  G.userData = { body, hips, spine, chest, head, lids, armL, armR, legL, legR, pack, tail:tailG,
+  G.userData = { body, hips, spine, chest, head, lids, armL, armR, legL, legR, pack, day, tail:tailG,
                  ph:0, spd:0, blink:2, blinkT:0, throwT:0, sway:0, tailV:0, tailA:0, cfg };
   return G;
 }
@@ -2662,9 +2863,11 @@ function animKid(k, s, dt){
 
 const KIDS = {
   ali:  makeKid({ skin:0xe3ab80, shirt:0x3f86b4, sleeve:0x356f96, short:0x27455a, hair:0x2a1f16,
-                  shoe:0xf0eadb, strap:0xcbbda2, cap:0xf4705a, trim:0xf6ecd9, scale:1.0 }),
+                  shoe:0xf2efe6, sole:0xdcd7c9, strap:0x3f86b4, lace:0xcfc6b4, cap:0xf4705a, trim:0xf6ecd9,
+                  pack:0x3f6b52, packD:0x2d5240, scale:1.0 }),
   alya: makeKid({ skin:0xf0c49c, shirt:0xf4705a, sleeve:0xe06552, short:0x3ad0c4, hair:0x4a2f1e,
-                  shoe:0xf6ecd9, strap:0xe9c47f, band:0xefb455, trim:0xffe3b0, scale:0.965 }),
+                  shoe:0xfbf5e8, sole:0xe6ddc9, strap:0xf4705a, lace:0xe9c47f, band:0xefb455, trim:0xffe3b0,
+                  pack:0xe0785f, packD:0xb95844, scale:0.965 }),
 };
 KIDS.ali.name = 'Ali'; KIDS.alya.name = 'Alya';
 scene.add(KIDS.ali, KIDS.alya);
@@ -3290,14 +3493,35 @@ function paintQuests(fresh){
       <span class="bx">${ic('check')}</span>
       <span class="tx">${q.t}${q.r ? `<em>₺${q.r}</em>` : ''}</span></div>`).join('');
 }
+let bannerT = 0;
+function banner(title, sub){
+  const el = $('banner');
+  $('banner-t').textContent = title;
+  $('banner-s').textContent = sub || '';
+  el.hidden = false; el.classList.remove('out');
+  void el.offsetWidth;
+  clearTimeout(bannerT);
+  bannerT = setTimeout(() => {
+    el.classList.add('out');
+    setTimeout(() => { el.hidden = true; }, 520);
+  }, 2600);
+}
+function paintObjective(){
+  const next = QUESTS.find(q => !done[q.id]);
+  const el = $('objective');
+  if(!next){ el.hidden = true; return; }
+  el.hidden = false;
+  $('obj-text').textContent = next.t + (next.r ? ' · ₺' + next.r : '');
+}
 function checkQuests(){
   let last = null;
   for(const q of QUESTS) if(!done[q.id] && q.f()){
     done[q.id] = true; last = q.id;
     GS.money += q.r;
+    banner('Görev tamam', q.t + (q.r ? '  ·  +₺' + q.r : ''));
     feed('Görev tamam · ' + q.t, { kind:'good', icon:'star', value:q.r ? '+₺' + q.r : '', hold:3600 });
   }
-  if(last){ paintQuests(last); refreshHUD(); }
+  if(last){ paintQuests(last); refreshHUD(); paintObjective(); }
 }
 
 /* ---------- envanter, dükkân, pano ---------- */
@@ -4066,8 +4290,11 @@ const tmp = new THREE.Vector3();
 const tmpF = new THREE.Vector3();
 const tmpV2 = new THREE.Vector3();
 const camWant = new THREE.Vector3();
+let camDistNow = 5.4, camFocusY = 0;
 const camLook = new THREE.Vector3(P.x, P.y + 1.4, P.z);
 let camInit = false;
+const sunDir = new THREE.Vector3(), sunRight = new THREE.Vector3(),
+      sunUp = new THREE.Vector3(), sunSnap = new THREE.Vector3();
 let miniTick = 0, lootTick = 0;
 
 function nearestStreet(x, z){
@@ -4497,13 +4724,16 @@ function animate(){
   } else {
     /* omuz üstü bakış: hedef biraz sağa kayar, kamera yumuşatılır */
     const rgx = Math.cos(camYaw), rgz = -Math.sin(camYaw);
-    const focus = tmpF.set(P.x + rgx*0.32, P.y + 1.24, P.z + rgz*0.32);
+    camFocusY = camInit ? camFocusY + (P.y + 1.24 - camFocusY)*(1 - Math.exp(-dt*13)) : P.y + 1.24;
+    const focus = tmpF.set(P.x + rgx*0.32, camFocusY, P.z + rgz*0.32);
     let d = camDist;
     const cx = Math.sin(camYaw)*Math.cos(camPitch), cy = Math.sin(camPitch), cz = Math.cos(camYaw)*Math.cos(camPitch);
     for(let st = 1.4; st < d; st += 1.1){
       if(blocked(blockBld, focus.x + cx*st, focus.z + cz*st)){ d = Math.max(1.9, st - 0.5); break; }
     }
-    camWant.set(focus.x + cx*d, focus.y + cy*d + 0.36, focus.z + cz*d);
+    camDistNow = camInit ? camDistNow + (d - camDistNow)*(1 - Math.exp(-dt*9)) : d;
+    const dd = camDistNow;
+    camWant.set(focus.x + cx*dd, focus.y + cy*dd + 0.36, focus.z + cz*dd);
     if(!GS.under){
       const minY = terrainH(camWant.x, camWant.z) + 0.6;
       if(camWant.y < minY) camWant.y = minY;
@@ -4533,9 +4763,19 @@ function animate(){
   }
 
   const focus2 = mode === 'orbit' ? target : tmpF.set(P.x, P.y, P.z);
-  const sd = new THREE.Vector3(...T.dir).normalize();
-  sun.position.copy(focus2).addScaledVector(sd, 500);
-  sun.target.position.copy(focus2);
+  sunDir.set(T.dir[0], T.dir[1], T.dir[2]).normalize();
+  /* gölge haritası oyuncuyla birlikte kaydığında kenarlar titrer;
+     odağı ışık uzayında bir doku hücresine yuvarlayıp bunu keseriz */
+  sunRight.set(0, 1, 0).cross(sunDir).normalize();
+  sunUp.copy(sunDir).cross(sunRight).normalize();
+  const span = sun.shadow.camera.right - sun.shadow.camera.left;
+  const texel = span / sun.shadow.mapSize.width;
+  const a1 = Math.round(focus2.dot(sunRight)/texel)*texel;
+  const a2 = Math.round(focus2.dot(sunUp)/texel)*texel;
+  const a3 = focus2.dot(sunDir);
+  sunSnap.set(0, 0, 0).addScaledVector(sunRight, a1).addScaledVector(sunUp, a2).addScaledVector(sunDir, a3);
+  sun.position.copy(sunSnap).addScaledVector(sunDir, 500);
+  sun.target.position.copy(sunSnap);
   sun.target.updateMatrixWorld();
 
   for(const b of boats){
@@ -4664,7 +4904,7 @@ HELD.ali.knife.visible = false; HELD.alya.knife.visible = false;
 P.y = terrainH(P.x, P.z);
 MATE.y = terrainH(MATE.x, MATE.z);
 compassTargets();
-paintQuests(); setTab(true); refreshHUD(); setTime('noon'); setMode('play');
+paintQuests(); paintObjective(); setTab(true); refreshHUD(); setTime('noon'); setMode('play');
 step(1, 'Hazır');
 animate();
 
