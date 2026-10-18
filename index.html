@@ -1,5 +1,15 @@
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#04131d">
+<meta name="color-scheme" content="dark">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Çakal Avı">
+<meta name="description" content="Denizkent kıyısında ganimet topla, sat, gece çakal avına çık.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
 <title>Denizkent Yazı</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Outfit:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -33,13 +43,16 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box}
-html,body{height:100%}
+html,body{height:100%; height:100dvh; overscroll-behavior:none}
 [hidden]{display:none !important}
 body{
   margin:0; background:var(--ink); color:var(--bone);
   font-family:var(--ui); overflow:hidden; -webkit-font-smoothing:antialiased;
   text-rendering:optimizeLegibility;
+  -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
+  -webkit-tap-highlight-color:transparent; touch-action:none;
 }
+body.touch button,body.touch .row{touch-action:manipulation}
 #stage{position:fixed; inset:0}
 #stage canvas{display:block; touch-action:none}
 button{font:inherit; color:inherit}
@@ -471,36 +484,117 @@ button:focus-visible,[role="button"]:focus-visible{outline:2px solid var(--teal)
   color:#bfeef4; text-shadow:0 1px 8px rgba(0,30,40,.9);
 }
 
-/* ---- dokunmatik ---- */
-#touch{display:none; position:fixed; inset:0; z-index:21; pointer-events:none}
+/* ---- dokunmatik: telefon ve tablet, dikey ve yatay ---- */
+#touch{display:none; position:fixed; inset:0; z-index:19; pointer-events:none}
 body.touch #touch{display:block}
-body.touch #radar{display:none}
+body.touch #radar,body.touch #journal,body.touch .legend,body.touch .belt{display:none}
+.touch-legend{display:none}
+body.touch .touch-legend{display:flex}
+/* araç rayı telefonda iki sütuna sarar, kimlik kartının altına inmez */
+body.touch .tool-rail{flex-direction:row; flex-wrap:wrap; width:94px; justify-content:center; gap:6px; padding:6px}
+body.touch .tool-rail .grp{display:contents}
+body.touch .tool-rail hr{display:none}
+/* telefonda ray sadeleşir: etiket anahtarları ve parıltı yardım penceresinde kalır */
+body.touch #t-streets,body.touch #t-pois,body.touch #b-fx,
+body.touch #s-morning,body.touch #s-dusk{display:none}
+body.touch .rbtn,body.touch .rbtn.sm{width:34px; height:34px}
+body.touch .rbtn .ico,body.touch .rbtn.sm .ico{width:17px; height:17px}
+body.touch #modal .sheet{max-height:88dvh}
+body.touch #modal-body{padding-bottom:28px}
+body.touch .btn{padding:11px 16px; font-size:13px}
+body.touch .srow{padding:12px 11px}
+body.touch #modal-close{width:40px; height:40px}
+#movezone{position:absolute; left:0; right:52%; top:22%; bottom:0; pointer-events:auto; touch-action:none}
+#lookzone{position:absolute; left:48%; right:0; top:16%; bottom:0; pointer-events:auto; touch-action:none}
 #joy{
-  position:absolute; left:calc(20px + env(safe-area-inset-left,0px)); bottom:calc(26px + env(safe-area-inset-bottom,0px));
-  width:132px; height:132px; border-radius:50%; pointer-events:auto; touch-action:none;
-  background:radial-gradient(circle at 50% 50%, rgba(8,32,44,.5), rgba(8,32,44,.26));
-  border:1px solid var(--hair); box-shadow:inset 0 0 24px rgba(2,12,18,.5);
+  position:absolute; width:124px; height:124px; margin:-62px 0 0 -62px; border-radius:50%;
+  pointer-events:none; opacity:0; transition:opacity .16s;
+  background:radial-gradient(circle at 50% 50%, rgba(8,32,44,.46), rgba(8,32,44,.2));
+  border:1px solid rgba(246,236,217,.22); box-shadow:inset 0 0 26px rgba(2,12,18,.5);
 }
-#joy::after{
-  content:""; position:absolute; inset:16px; border-radius:50%; border:1px dashed rgba(246,236,217,.12);
-}
+#joy.on{opacity:1}
+#joy::after{content:""; position:absolute; inset:16px; border-radius:50%; border:1px dashed rgba(246,236,217,.14)}
 #joy-k{
   position:absolute; left:50%; top:50%; width:54px; height:54px; border-radius:50%;
-  background:radial-gradient(circle at 42% 34%, rgba(94,236,226,.95), rgba(32,150,146,.85));
-  border:1px solid rgba(246,236,217,.5); transform:translate(-50%,-50%);
-  box-shadow:0 6px 16px -4px rgba(0,0,0,.7);
+  background:radial-gradient(circle at 42% 34%, rgba(94,236,226,.95), rgba(32,150,146,.88));
+  border:1px solid rgba(246,236,217,.55); transform:translate(-50%,-50%);
+  box-shadow:0 6px 18px -4px rgba(0,0,0,.75);
 }
+#joy-hint{
+  position:absolute; left:calc(28px + env(safe-area-inset-left,0px));
+  bottom:calc(30px + env(safe-area-inset-bottom,0px));
+  width:96px; height:96px; border-radius:50%; pointer-events:none;
+  border:1px dashed rgba(246,236,217,.16); display:grid; place-items:center;
+  font-family:var(--mono); font-size:9px; letter-spacing:.14em; color:rgba(246,236,217,.3);
+  transition:opacity .25s;
+}
+#joy-hint.hide{opacity:0}
+
 #tbtns{
-  position:absolute; right:calc(16px + env(safe-area-inset-right,0px)); bottom:calc(24px + env(safe-area-inset-bottom,0px));
-  display:grid; grid-template-columns:repeat(3,60px); gap:9px; pointer-events:auto;
+  position:fixed; z-index:23; right:calc(14px + env(safe-area-inset-right,0px));
+  bottom:calc(16px + env(safe-area-inset-bottom,0px));
+  display:grid; grid-template-columns:repeat(3, var(--tb)); gap:10px;
+  pointer-events:auto; --tb:60px;
 }
+body.touch #tbtns{display:grid}
+#tbtns{display:none}
 #tbtns button{
-  height:60px; border-radius:50%; border:1px solid var(--hair); background:rgba(6,26,36,.78);
-  color:var(--bone-2); display:grid; place-items:center; gap:1px; cursor:pointer; touch-action:none;
-  font-size:9px; letter-spacing:.04em;
+  width:var(--tb); height:var(--tb); border-radius:50%; border:1px solid var(--hair);
+  background:radial-gradient(circle at 50% 30%, rgba(14,48,64,.9), rgba(5,22,32,.82));
+  color:var(--bone-2); display:grid; place-items:center; gap:1px; cursor:pointer;
+  touch-action:none; font-size:9px; letter-spacing:.03em; backdrop-filter:blur(8px);
+  box-shadow:0 10px 22px -12px #000;
 }
 #tbtns button .ico{width:22px; height:22px}
-#tbtns button:active{background:rgba(58,208,196,.3); color:var(--bone)}
+#tbtns button:active{background:rgba(58,208,196,.34); color:#eafffd; transform:scale(.94)}
+#tbtns button.lock{opacity:.4}
+#tbtns button.on{color:var(--teal); border-color:rgba(58,208,196,.5); background:rgba(58,208,196,.18)}
+#tbtns .big{
+  grid-column:3; grid-row:1 / span 2; width:calc(var(--tb)*1.4); height:calc(var(--tb)*1.4);
+  align-self:end; justify-self:end; border-color:rgba(58,208,196,.45);
+  background:radial-gradient(circle at 50% 30%, rgba(26,88,96,.95), rgba(8,36,44,.9));
+  color:var(--bone);
+}
+#tbtns .big .ico{width:28px; height:28px}
+#tbtns .big.hot{border-color:var(--teal); box-shadow:0 0 26px -6px rgba(58,208,196,.8)}
+#tbtns .n{font-family:var(--mono); font-size:8.5px; color:var(--bone-3)}
+
+/* dikey telefon: HUD sadeleşir, kontroller büyür */
+@media (orientation:portrait){
+  body.touch #compass{width:min(380px,94vw); height:32px; top:calc(8px + env(safe-area-inset-top,0px))}
+  body.touch #compass .needle{height:38px}
+  body.touch #objective{top:calc(46px + env(safe-area-inset-top,0px)); max-width:92vw}
+  body.touch #objective b{font-size:11.5px}
+  body.touch #hud-tl{top:calc(46px + env(safe-area-inset-top,0px)); left:max(10px,env(safe-area-inset-left,0px))}
+  body.touch #hud-tr{top:calc(46px + env(safe-area-inset-top,0px)); right:max(10px,env(safe-area-inset-right,0px))}
+  body.touch #feed{top:auto; bottom:calc(238px + env(safe-area-inset-bottom,0px)); transform:none; max-width:66vw}
+  body.touch #hud-tr{top:calc(104px + env(safe-area-inset-top,0px))}
+  body.touch #vitals{bottom:calc(206px + env(safe-area-inset-bottom,0px))}
+  body.touch #prompt{bottom:calc(264px + env(safe-area-inset-bottom,0px))}
+  body.touch #tbtns{--tb:64px}
+  body.touch #lookzone{top:22%}
+}
+/* yatay telefon: her şey kenarlara yapışır */
+@media (orientation:landscape) and (max-height:520px){
+  body.touch #compass{width:min(420px,52vw); height:30px}
+  body.touch #objective{top:calc(42px + env(safe-area-inset-top,0px)); font-size:11px}
+  body.touch #vitals{bottom:calc(10px + env(safe-area-inset-bottom,0px)); left:auto; right:calc(240px + env(safe-area-inset-right,0px)); transform:none}
+  body.touch #prompt{bottom:calc(96px + env(safe-area-inset-bottom,0px))}
+  body.touch #feed{max-width:42vw; top:auto; bottom:calc(12px + env(safe-area-inset-bottom,0px));
+                   left:calc(136px + env(safe-area-inset-left,0px)); right:auto; align-items:flex-start}
+  body.touch #tbtns{--tb:54px; gap:8px}
+  body.touch .ident{padding:5px 10px 5px 6px}
+  body.touch .medallion{width:40px; height:40px}
+  body.touch .medallion svg.rg{inset:-3px; width:46px; height:46px}
+  body.touch .ident .who{font-size:14px}
+  body.touch .ident .place,body.touch .ident .lvl{display:none}
+}
+/* tablet: daha geniş yerleşim, dokunma hedefleri büyük kalır */
+@media (min-width:820px) and (pointer:coarse){
+  body.touch #tbtns{--tb:70px}
+  body.touch #radar{display:block; width:150px; height:150px; bottom:calc(16px + env(safe-area-inset-bottom,0px)); right:calc(250px + env(safe-area-inset-right,0px))}
+  body.touch #joy-hint{width:110px; height:110px}
+}
 
 /* ---- açılış ve başlık ---- */
 #boot{
@@ -705,6 +799,8 @@ body.touch #radar{display:none}
     <div class="grp">
       <button class="rbtn sm" id="t-streets" aria-pressed="true" title="Sokak adları"><svg class="ico"><use href="#i-tag"/></svg></button>
       <button class="rbtn sm" id="t-pois" aria-pressed="true" title="Mekan adları"><svg class="ico"><use href="#i-pin"/></svg></button>
+      <button class="rbtn sm" id="b-quests" title="Görevler"><svg class="ico"><use href="#i-quest"/></svg></button>
+      <button class="rbtn sm" id="b-fs" title="Tam ekran"><svg class="ico"><use href="#i-map"/></svg></button>
       <button class="rbtn sm" id="b-fx" aria-pressed="true" title="Parıltı efekti (P)"><svg class="ico"><use href="#i-star"/></svg></button>
       <button class="rbtn sm" id="b-help" title="Kontroller (H)"><svg class="ico"><use href="#i-help"/></svg></button>
     </div>
@@ -764,16 +860,19 @@ body.touch #radar{display:none}
 </div>
 
 <div id="touch">
+  <div id="movezone"></div>
+  <div id="lookzone"></div>
+  <div id="joy-hint">YÜRÜ</div>
   <div id="joy"><div id="joy-k"></div></div>
-  <div id="tbtns">
-    <button id="tb-dive"><svg class="ico"><use href="#i-dive"/></svg>Dal</button>
-    <button id="tb-jump"><svg class="ico"><use href="#i-jump"/></svg>Zıpla</button>
-    <button id="tb-torch"><svg class="ico"><use href="#i-torch"/></svg>Fener</button>
-    <button id="tb-stone"><svg class="ico"><use href="#i-rock"/></svg>Taş</button>
-    <button id="tb-e"><svg class="ico"><use href="#i-hand"/></svg>Etkileş</button>
-    <button id="tb-bag"><svg class="ico"><use href="#i-bag"/></svg>Çanta</button>
-    <button id="tb-swap"><svg class="ico"><use href="#i-swap"/></svg>Değiş</button>
-  </div>
+</div>
+<div id="tbtns">
+  <button id="tb-dive"><svg class="ico"><use href="#i-dive"/></svg><span class="n">Dal</span></button>
+  <button id="tb-jump"><svg class="ico"><use href="#i-jump"/></svg><span class="n">Zıpla</span></button>
+  <button id="tb-e" class="big"><svg class="ico"><use href="#i-hand"/></svg><span class="n">Etkileş</span></button>
+  <button id="tb-torch"><svg class="ico"><use href="#i-torch"/></svg><span class="n">Fener</span></button>
+  <button id="tb-stone"><svg class="ico"><use href="#i-rock"/></svg><span class="n">Taş</span></button>
+  <button id="tb-bag"><svg class="ico"><use href="#i-bag"/></svg><span class="n">Çanta</span></button>
+  <button id="tb-swap"><svg class="ico"><use href="#i-swap"/></svg><span class="n">Değiş</span></button>
 </div>
 
 <div id="title" hidden>
@@ -783,6 +882,13 @@ body.touch #radar{display:none}
     <p class="lede">Ali ve Alya bütün yazı koyda geçiriyor: kabuk, mineralli taş, bir de kimsenin istemediği delik otel terliği — hepsi ganimet. Akşam büfede satılır, gece el feneriyle çakal avına çıkılır. Kim oynuyor?</p>
     <div class="picks" id="picks"></div>
     <button class="btn go" id="start">Başla</button>
+    <p class="legend touch-legend">
+      <span><kbd>Sol yarı</kbd><b>yürü (parmağını kaydır)</b></span>
+      <span><kbd>Sağ yarı</kbd><b>bak · tek dokunuş taş atar</b></span>
+      <span><kbd>İki parmak</kbd><b>yakınlaş</b></span>
+      <span><kbd>Sağ alt</kbd><b>dal · zıpla · fener · çanta</b></span>
+      <span><kbd>Büyük tuş</kbd><b>etkileşim</b></span>
+    </p>
     <p class="legend">
       <span><kbd>W A S D</kbd><b>yürü</b></span><span><kbd>Shift</kbd><b>koş</b></span>
       <span><kbd>Boşluk</kbd><b>zıpla</b></span><span><kbd>C</kbd><b>dal</b></span>
@@ -857,27 +963,61 @@ const rand = (s => () => (s = (s*1664525 + 1013904223) >>> 0) / 4294967296)(2026
 const pick = arr => arr[Math.floor(rand()*arr.length)];
 
 /* ---------------- sahne ---------------- */
+/* ---- cihaz ve kalite kademesi ----
+   Oyun telefon ve tablette de çalışacağı için sahne, en baştan cihazın
+   gücüne göre kuruluyor: gölge çözünürlüğü, su ağı, serpinti yoğunluğu,
+   parıltı katmanı ve piksel oranı kademeye bağlı. Kare hızı düşerse
+   kademe oyun sırasında kendiliğinden iniyor.                              */
+const UA = navigator.userAgent;
+const QS = new URLSearchParams(location.search);          /* ?touch=1 · ?tier=0..3 — test için */
+const COARSE = QS.has('touch') || matchMedia('(pointer:coarse)').matches || navigator.maxTouchPoints > 1;
+const MOBILE = COARSE || /Mobi|Android|iPhone|iPad|iPod/i.test(UA);
+const IOS = /iPad|iPhone|iPod/.test(UA) || (/Mac/.test(UA) && navigator.maxTouchPoints > 1);
+const CORES = navigator.hardwareConcurrency || 4;
+const MEM = navigator.deviceMemory || 4;
+const SHORT = Math.min(innerWidth, innerHeight);
+const QUAL = [
+  { dpr:1.0,  shadow:0,    bloom:false, water:70,  scatter:0.42, env:false, far:1100, fogK:1.5,  lamps:3, loot:0.55 },
+  { dpr:1.3,  shadow:1024, bloom:false, water:100, scatter:0.7,  env:true,  far:1600, fogK:1.18, lamps:4, loot:0.7 },
+  { dpr:1.6,  shadow:1536, bloom:true,  water:120, scatter:0.85, env:true,  far:2600, fogK:1.05, lamps:5, loot:0.88 },
+  { dpr:2.0,  shadow:2048, bloom:true,  water:140, scatter:1,    env:true,  far:5000, fogK:1,    lamps:6, loot:1 },
+];
+let tier = !MOBILE ? 3
+         : (CORES >= 8 && MEM >= 6 && SHORT >= 700) ? 2          /* güçlü tablet */
+         : (CORES >= 6 && MEM >= 4) ? 1                          /* orta telefon */
+         : 0;
+if(QS.has('tier')) tier = Math.max(0, Math.min(3, +QS.get('tier')|0));
+const Q = QUAL[tier];
+const isPhone = MOBILE;
+
 const stage = document.getElementById('stage');
-const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
-const isPhone = Math.min(innerWidth, innerHeight) < 760 || /Mobi|Android/i.test(navigator.userAgent);
-renderer.setPixelRatio(Math.min(devicePixelRatio, isPhone ? 1.6 : 2));
-if(isPhone || matchMedia('(pointer:coarse)').matches){
-  document.body.classList.add('touch');
-  document.getElementById('journal').classList.add('min');
-}
+const renderer = new THREE.WebGLRenderer({
+  antialias: tier >= 2, powerPreference:'high-performance', alpha:false, stencil:false,
+});
+renderer.setPixelRatio(Math.min(devicePixelRatio, Q.dpr));
+if(MOBILE) document.body.classList.add('touch');
 renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled = Q.shadow > 0;
+renderer.shadowMap.type = tier >= 2 ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.02;
 stage.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(52, innerWidth/innerHeight, 0.6, 5000);
+/* dikeyde dar bir yatay görüş kalmasın diye görüş açısı en-boy oranına göre hesaplanır */
+let baseFov = 50;
+function fitFov(){
+  const aspect = innerWidth/Math.max(1, innerHeight);
+  const hfov = (MOBILE ? 78 : 74)*Math.PI/180;
+  const v = 2*Math.atan(Math.tan(hfov/2)/Math.max(0.35, aspect))*180/Math.PI;
+  baseFov = Math.max(44, Math.min(88, v));
+  return baseFov;
+}
+const camera = new THREE.PerspectiveCamera(fitFov(), innerWidth/innerHeight, 0.5, Q.far);
 
 const sun = new THREE.DirectionalLight(0xfff4e0, 3.1);
-sun.castShadow = true;
-sun.shadow.mapSize.set(isPhone ? 1024 : 2048, isPhone ? 1024 : 2048);
+sun.castShadow = Q.shadow > 0;
+sun.shadow.mapSize.set(Q.shadow || 512, Q.shadow || 512);
 sun.shadow.camera.near = 20; sun.shadow.camera.far = 1400;
 const SH = 300;
 sun.shadow.camera.left = -SH; sun.shadow.camera.right = SH;
@@ -888,7 +1028,7 @@ scene.add(sun, sun.target);
 
 const hemi = new THREE.HemisphereLight(0xbfe4ff, 0x7a6f52, 1.1);
 scene.add(hemi);
-const fog = new THREE.FogExp2(0xbfdcea, 0.0013);
+const fog = new THREE.FogExp2(0xbfdcea, 0.0013*Q.fogK);
 scene.fog = fog;
 
 const skyMat = new THREE.ShaderMaterial({
@@ -906,7 +1046,7 @@ const skyMat = new THREE.ShaderMaterial({
       gl_FragColor = vec4(c, 1.);
     }`
 });
-const skyDome = new THREE.Mesh(new THREE.SphereGeometry(2400, 32, 20), skyMat);
+const skyDome = new THREE.Mesh(new THREE.SphereGeometry(Math.min(2300, Q.far*0.62), 32, 20), skyMat);
 scene.add(skyDome);
 
 /* gökyüzünden ortam haritası: pencere camı, metal ve araba boyası gökyüzünü yansıtsın */
@@ -917,6 +1057,7 @@ const envDome = new THREE.Mesh(new THREE.SphereGeometry(10, 24, 16), skyMat);
 envScene.add(envDome);
 let envRT = null;
 function refreshEnv(){
+  if(!Q.env) return;
   if(envRT) envRT.dispose();
   envRT = pmrem.fromScene(envScene, 0.04);
   scene.environment = envRT.texture;
@@ -1039,7 +1180,7 @@ const waterUni = {
   uSunCol:{value:new THREE.Color(0xfff2d6)},
 };
 const water = new THREE.Mesh(
-  new THREE.PlaneGeometry(4200, 4200, 140, 140),
+  new THREE.PlaneGeometry(3200, 3200, Q.water, Q.water),
   new THREE.ShaderMaterial({
     uniforms: waterUni, transparent:true, side:THREE.DoubleSide,
     vertexShader:`
@@ -1236,7 +1377,7 @@ const lampSpots = [];
 for(const r of W.roads){
   const raw = r.pts.map(p => [px2x(p[0]), pz2z(p[1])]);
   if(raw.length < 2) continue;
-  const pts = resample(raw, 1.6);
+  const pts = resample(raw, tier <= 1 ? 3.2 : 2.2);
   const nn = sideNormals(pts);
   const wm = Math.max(3.0, r.width * S);
   const hw = wm/2;
@@ -1246,12 +1387,16 @@ for(const r of W.roads){
   strip(pts, nn, -hw, hw, 0.055, rP, rC, rI, C_PAVER, true);
   /* orta kiremit şerit */
   if(wide) strip(pts, nn, -hw*0.16, hw*0.16, 0.075, bP, bC, bI, C_BAND, true);
-  /* bordür + etek */
+  /* bordür + toprağa inen etek (zayıf cihazda sadece etek) */
   for(const sgn of [-1, 1]){
-    const o = sgn*hw;
-    strip(pts, nn, o, o + sgn*(wide ? 0.6 : 0.35), 0.17, kP, kC, kI, C_KERB, false);
-    curtain(pts, nn, o, 0.17, 0.16, kP, kC, kI, C_EDGE);
-    curtain(pts, nn, o + sgn*(wide ? 0.6 : 0.35), 0.17, 0.75, kP, kC, kI, C_WALL);
+    const o = sgn*hw, ow = o + sgn*(wide ? 0.6 : 0.35);
+    if(tier >= 1){
+      strip(pts, nn, o, ow, 0.17, kP, kC, kI, C_KERB, false);
+      curtain(pts, nn, o, 0.17, 0.16, kP, kC, kI, C_EDGE);
+      curtain(pts, nn, ow, 0.17, 0.75, kP, kC, kI, C_WALL);
+    } else {
+      curtain(pts, nn, o, 0.06, 0.7, kP, kC, kI, C_WALL);
+    }
   }
 
   let acc = 0;
@@ -2219,42 +2364,36 @@ const ITEMS = {
 const JUNK = ['terlik','sise','anahtar','kgozluk'];
 
 function lootGeo(id){
+  /* Ganimetler binlerce kopya halinde çiziliyor; her biri 150 üçgenin altında
+     kalacak şekilde sade tutuldu — telefonda kare hızı buna çok duyarlı. */
   const C = h => new THREE.Color(h);
   const parts = [], cols = [];
   const add = (g, c) => { parts.push(g); cols.push(C(c)); };
 
   if(id === 'kabuk'){
-    /* tarak kabuğu: kubbe + ışınsal kaburgalar + menteşe */
-    const dome = new THREE.SphereGeometry(0.2, 16, 8, 0, Math.PI*2, 0, Math.PI/2);
+    const dome = new THREE.SphereGeometry(0.2, 9, 4, 0, Math.PI*2, 0, Math.PI/2);
     dome.scale(1, 0.42, 0.88); add(dome, 0xf6ead6);
-    for(let i = 0; i < 9; i++){
-      const a = -Math.PI/2 + (i/8)*Math.PI;
-      const rib = new THREE.CapsuleGeometry(0.012, 0.17, 3, 6);
-      rib.rotateZ(Math.PI/2); rib.rotateY(a);
-      rib.translate(Math.sin(a)*0.085, 0.055, Math.cos(a)*0.075 - 0.02);
-      add(rib, i%2 ? 0xe8d6bb : 0xf2e2ca);
+    for(let i = 0; i < 5; i++){
+      const a = -Math.PI/2 + (i/4)*Math.PI;
+      const rib = new THREE.BoxGeometry(0.016, 0.012, 0.17);
+      rib.rotateY(a); rib.translate(Math.sin(a)*0.08, 0.05, Math.cos(a)*0.07 - 0.015);
+      add(rib, i%2 ? 0xe2cfb2 : 0xf2e2ca);
     }
-    const hinge = new THREE.CylinderGeometry(0.035, 0.055, 0.05, 8);
-    hinge.rotateX(Math.PI/2); hinge.translate(0, 0.03, 0.17);
-    add(hinge, 0xdfc8a8);
-    const lip = new THREE.TorusGeometry(0.185, 0.012, 6, 18, Math.PI);
-    lip.rotateX(Math.PI/2); lip.scale(1, 1, 0.88); lip.translate(0, 0.02, 0);
-    add(lip, 0xeaddc4);
+    const hinge = new THREE.BoxGeometry(0.1, 0.05, 0.05);
+    hinge.translate(0, 0.03, 0.16); add(hinge, 0xdfc8a8);
     return mergeSimple(parts, cols);
   }
   if(id === 'salyangoz'){
-    /* sarmal: küçülen küreler logaritmik spiral üzerinde */
-    for(let i = 0; i < 7; i++){
-      const t = i/6;
-      const r = 0.085*(1 - t*0.72);
-      const a = t*5.6;
-      const sp = new THREE.SphereGeometry(r, 10, 8);
-      sp.translate(Math.cos(a)*0.075*(1-t*0.6), 0.07 + t*0.1, Math.sin(a)*0.075*(1-t*0.6));
+    for(let i = 0; i < 4; i++){
+      const t = i/3;
+      const r = 0.088*(1 - t*0.66);
+      const a = t*5.2;
+      const sp = new THREE.SphereGeometry(r, 7, 5);
+      sp.translate(Math.cos(a)*0.07*(1-t*0.5), 0.07 + t*0.085, Math.sin(a)*0.07*(1-t*0.5));
       add(sp, i%2 ? 0xdcbd92 : 0xc8a473);
     }
-    const mouth = new THREE.ConeGeometry(0.07, 0.11, 10, 1, true);
-    mouth.rotateX(1.3); mouth.translate(0.04, 0.05, -0.08);
-    add(mouth, 0xf0e0c6);
+    const mouth = new THREE.ConeGeometry(0.07, 0.1, 6, 1, true);
+    mouth.rotateX(1.3); mouth.translate(0.04, 0.05, -0.075); add(mouth, 0xf0e0c6);
     return mergeSimple(parts, cols);
   }
   if(id === 'tas'){
@@ -2262,24 +2401,23 @@ function lootGeo(id){
     a.scale(1, 0.72, 1.08); a.translate(0, 0.1, 0); add(a, 0x9c8f7a);
     const b = new THREE.DodecahedronGeometry(0.075, 0);
     b.translate(0.1, 0.07, -0.06); add(b, 0x8d8372);
-    for(let i = 0; i < 3; i++){
-      const v = new THREE.OctahedronGeometry(0.028, 0);
-      v.translate(-0.05 + i*0.06, 0.16 - (i%2)*0.04, 0.03 - i*0.04);
-      add(v, i%2 ? 0xd8cdae : 0xb9c9cc);
+    for(let i = 0; i < 2; i++){
+      const v = new THREE.OctahedronGeometry(0.03, 0);
+      v.translate(-0.04 + i*0.08, 0.16 - i*0.03, 0.02 - i*0.05);
+      add(v, i ? 0xd8cdae : 0xb9c9cc);
     }
     return mergeSimple(parts, cols);
   }
   if(id === 'mineral'){
-    /* kristal kümesi: altıgen prizmalar + sivri uçlar */
-    const spots = [[0, 0, 0, 1], [0.1, 0, 0.05, 0.62], [-0.08, 0, 0.07, 0.5], [0.03, 0, -0.1, 0.44]];
-    for(const [x, , z, sc] of spots){
+    const spots = [[0, 0, 1], [0.1, 0.05, 0.62], [-0.075, 0.07, 0.48]];
+    for(const [x, z, sc] of spots){
       const h = 0.26*sc;
-      const pr = new THREE.CylinderGeometry(0.055*sc, 0.06*sc, h, 6);
+      const pr = new THREE.CylinderGeometry(0.055*sc, 0.06*sc, h, 5);
       pr.translate(x, h/2, z); add(pr, 0x72d6e2);
-      const tip = new THREE.ConeGeometry(0.056*sc, 0.1*sc, 6);
+      const tip = new THREE.ConeGeometry(0.056*sc, 0.1*sc, 5);
       tip.translate(x, h + 0.05*sc, z); add(tip, 0x9ae8f0);
     }
-    const base = new THREE.DodecahedronGeometry(0.1, 0);
+    const base = new THREE.OctahedronGeometry(0.1, 0);
     base.scale(1, 0.4, 1); base.translate(0, 0.03, 0); add(base, 0x7e8a86);
     return mergeSimple(parts, cols);
   }
@@ -2293,35 +2431,31 @@ function lootGeo(id){
     return mergeSimple(parts, cols);
   }
   if(id === 'terlik'){
-    const sole = new THREE.SphereGeometry(1, 14, 10);
+    const sole = new THREE.SphereGeometry(1, 8, 5);
     sole.scale(0.07, 0.022, 0.16); sole.translate(0, 0.025, 0); add(sole, 0x3f74ad);
-    const top = new THREE.SphereGeometry(1, 14, 10);
-    top.scale(0.062, 0.012, 0.15); top.translate(0, 0.04, 0); add(top, 0x5b92c8);
     for(const sx of [-1, 1]){
-      const st = new THREE.CapsuleGeometry(0.011, 0.085, 3, 6);
-      st.rotateX(1.1); st.rotateZ(sx*0.5); st.translate(sx*0.03, 0.055, 0.035);
+      const st = new THREE.BoxGeometry(0.012, 0.012, 0.09);
+      st.rotateX(0.5); st.rotateY(sx*0.5); st.translate(sx*0.03, 0.055, 0.035);
       add(st, 0x2d5c8c);
     }
-    const post = new THREE.CylinderGeometry(0.009, 0.009, 0.03, 6);
+    const post = new THREE.BoxGeometry(0.016, 0.03, 0.016);
     post.translate(0, 0.05, -0.085); add(post, 0x2d5c8c);
-    const hole = new THREE.TorusGeometry(0.018, 0.005, 5, 10);
-    hole.rotateX(Math.PI/2); hole.translate(0.02, 0.048, 0.06); add(hole, 0x24486e);
     return mergeSimple(parts, cols);
   }
   if(id === 'sise'){
     const body = new THREE.LatheGeometry([[0.001,0],[0.056,0.008],[0.058,0.17],[0.046,0.21],
-      [0.024,0.245],[0.022,0.31],[0.001,0.312]].map(q => new THREE.Vector2(q[0], q[1])), 12);
+      [0.024,0.245],[0.022,0.31],[0.001,0.312]].map(q => new THREE.Vector2(q[0], q[1])), 8);
     add(body, 0x77b06a);
-    const label = new THREE.CylinderGeometry(0.06, 0.06, 0.075, 12, 1, true);
+    const label = new THREE.CylinderGeometry(0.06, 0.06, 0.075, 8, 1, true);
     label.translate(0, 0.1, 0); add(label, 0xe8dfc8);
-    const cap = new THREE.CylinderGeometry(0.025, 0.025, 0.016, 10);
+    const cap = new THREE.CylinderGeometry(0.025, 0.025, 0.016, 6);
     cap.translate(0, 0.318, 0); add(cap, 0xc9b06a);
     return mergeSimple(parts, cols);
   }
   if(id === 'anahtar'){
-    const r = new THREE.TorusGeometry(0.048, 0.014, 6, 14);
+    const r = new THREE.TorusGeometry(0.048, 0.014, 4, 9);
     r.rotateX(Math.PI/2); r.translate(0, 0.018, -0.075); add(r, 0xa87a46);
-    const sh = new THREE.CylinderGeometry(0.012, 0.012, 0.17, 8);
+    const sh = new THREE.CylinderGeometry(0.012, 0.012, 0.17, 6);
     sh.rotateX(Math.PI/2); sh.translate(0, 0.018, 0.03); add(sh, 0xb98a52);
     for(let i = 0; i < 2; i++){
       const t = new THREE.BoxGeometry(0.008, 0.03, 0.016);
@@ -2331,9 +2465,9 @@ function lootGeo(id){
   }
   /* kırık güneş gözlüğü */
   for(const sx of [-1, 1]){
-    const rim = new THREE.TorusGeometry(0.055, 0.011, 6, 14);
+    const rim = new THREE.TorusGeometry(0.055, 0.011, 4, 9);
     rim.rotateX(Math.PI/2); rim.translate(sx*0.065, 0.016, 0); add(rim, 0x33333d);
-    const lens = new THREE.CircleGeometry(0.05, 12);
+    const lens = new THREE.CircleGeometry(0.05, 8);
     lens.rotateX(-Math.PI/2); lens.translate(sx*0.065, 0.018, 0); add(lens, 0x4e5b66);
   }
   const bridge = new THREE.BoxGeometry(0.055, 0.009, 0.012);
@@ -2376,7 +2510,7 @@ for(let j = 1; j < GH-1; j++) for(let i = 1; i < GW-1; i++){
     pr = sb === 3 ? 0.045 : 0.16;
     if(h < -4) pr *= 0.6;
   }
-  if(!tbl || rand() > pr) continue;
+  if(!tbl || rand() > pr*Q.loot) continue;
   const x = MINX + (i + rand()-0.5)*GSTEP, z = MINZ + (j + rand()-0.5)*GSTEP;
   if(blocked(blockBld, x, z) || blocked(blockRoad, x, z)) continue;
   let id = roll(tbl);
@@ -3348,7 +3482,7 @@ scene.add(kidGlow);
 
 /* gece sokak lambaları — oyuncuya en yakın altı tanesi yanar */
 const lampLights = [];
-for(let i = 0; i < 6; i++){
+for(let i = 0; i < Q.lamps; i++){
   const l = new THREE.PointLight(0xffd9a0, 0, 38, 1.5);
   l.visible = false; scene.add(l); lampLights.push(l);
 }
@@ -3518,7 +3652,7 @@ function checkQuests(){
   for(const q of QUESTS) if(!done[q.id] && q.f()){
     done[q.id] = true; last = q.id;
     GS.money += q.r;
-    banner('Görev tamam', q.t + (q.r ? '  ·  +₺' + q.r : ''));
+    banner('Görev tamam', q.t + (q.r ? '  ·  +₺' + q.r : '')); buzz([16, 60, 24]);
     feed('Görev tamam · ' + q.t, { kind:'good', icon:'star', value:q.r ? '+₺' + q.r : '', hold:3600 });
   }
   if(last){ paintQuests(last); refreshHUD(); paintObjective(); }
@@ -3681,7 +3815,7 @@ function takeLoot(o){
   addStat('total', 1);
   if(ITEMS[o.id].junk) addStat('junk', 1);
   if(o.water && P.dive) addStat('dived', 1);
-  lootFeed(o.id);
+  lootFeed(o.id); buzz(12);
   refreshHUD(); checkQuests();
   if(!o.home){ gridDel(o); const i = loot.indexOf(o); if(i >= 0) loot.splice(i, 1); lootFree[o.id].push(o.slot); }
 }
@@ -3729,7 +3863,7 @@ const pebGeo = (() => {
   a.scale(1, 0.55, 1.2); a.translate(0, 0.03, 0);
   return mergeSimple([a], [new THREE.Color(1, 1, 1)]);
 })();
-const TUFT_N = 420, PEB_N = 220;
+const TUFT_N = Math.round(420*Q.scatter), PEB_N = Math.round(220*Q.scatter);
 const tufts = new THREE.InstancedMesh(tuftGeo,
   new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.95, side:THREE.DoubleSide }), TUFT_N);
 const pebs = new THREE.InstancedMesh(pebGeo,
@@ -3808,12 +3942,14 @@ function applyOrbit(){
 
 const cv = renderer.domElement;
 let drag = null;
+const fromTouchUI = e => document.body.classList.contains('touch') && e.pointerType !== 'mouse';
 cv.addEventListener('pointerdown', e => {
+  if(fromTouchUI(e)) return;
   cv.setPointerCapture(e.pointerId);
   drag = { x:e.clientX, y:e.clientY, sx:e.clientX, sy:e.clientY, btn:e.button, id:e.pointerId, t:performance.now(), moved:0 };
 });
 cv.addEventListener('pointermove', e => {
-  if(!drag || drag.id !== e.pointerId) return;
+  if(fromTouchUI(e) || !drag || drag.id !== e.pointerId) return;
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   drag.x = e.clientX; drag.y = e.clientY;
   drag.moved += Math.abs(dx) + Math.abs(dy);
@@ -3941,7 +4077,7 @@ function setMode(m){
   sun.shadow.camera.top = SH2; sun.shadow.camera.bottom = -SH2;
   sun.shadow.normalBias = m === 'play' ? 0.1 : 0.6;
   sun.shadow.camera.updateProjectionMatrix();
-  camera.fov = m === 'play' ? 50 : 54;
+  camera.fov = m === 'play' ? baseFov : baseFov + 4;
   camera.updateProjectionMatrix();
   if(m !== 'play'){
     target.set(P.x, Math.max(0, terrainH(P.x, P.z)), P.z);
@@ -4028,7 +4164,7 @@ function setTime(k){
   skyMat.uniforms.bot.value.setHex(t.bot);
   skyMat.uniforms.sunDir.value.copy(d);
   skyMat.uniforms.sunCol.value.setHex(k === 'night' ? 0xcdd8ea : t.sun);
-  fog.color.setHex(t.fog); fog.density = t.fogD;
+  fog.color.setHex(t.fog); fog.density = t.fogD*Q.fogK;
   waterUni.uSun.value.copy(d);
   waterUni.uDeep.value.setHex(t.deep);
   waterUni.uShallow.value.setHex(t.shal);
@@ -4059,32 +4195,94 @@ $('panel-min').addEventListener('click', () => {
 });
 $('avatar').addEventListener('click', () => switchKid());
 
-/* ---------- dokunmatik ---------- */
+/* ---------- dokunmatik: yüzen yön çubuğu + bakış alanı + eylem tuşları ----------
+   Sol yarıya parmak basınca yön çubuğu parmağın altında beliriyor, sağ yarı
+   kamerayı döndürüyor; iki parmakla yakınlaşma var. Tuşlar titreşimli.        */
+const buzz = ms => { try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e){} };
 (() => {
-  const joy = $('joy'), knob = $('joy-k');
-  let jid = null, cx = 0, cy = 0;
-  const R = 48;
-  joy.addEventListener('pointerdown', e => {
-    jid = e.pointerId; joy.setPointerCapture(jid);
-    const r = joy.getBoundingClientRect(); cx = r.left + r.width/2; cy = r.top + r.height/2;
-    move(e);
+  const joy = $('joy'), knob = $('joy-k'), hint = $('joy-hint');
+  const moveZone = $('movezone'), lookZone = $('lookzone');
+  const R = 52;
+
+  /* --- yürüme --- */
+  let mId = null, mx0 = 0, my0 = 0;
+  moveZone.addEventListener('pointerdown', e => {
+    if(mId !== null || !UI.modal.hidden || !started) return;
+    mId = e.pointerId;
+    try{ moveZone.setPointerCapture(mId); }catch(err){}
+    mx0 = e.clientX; my0 = e.clientY;
+    joy.style.left = mx0 + 'px'; joy.style.top = my0 + 'px';
+    joy.classList.add('on'); hint.classList.add('hide');
+    knob.style.transform = 'translate(-50%,-50%)';
+    e.preventDefault();
   });
-  joy.addEventListener('pointermove', e => { if(e.pointerId === jid) move(e); });
-  const up = e => { if(e.pointerId === jid){ jid = null; IN.mx = IN.mz = 0; IN.run = false; knob.style.transform = 'translate(-50%,-50%)'; } };
-  joy.addEventListener('pointerup', up); joy.addEventListener('pointercancel', up);
-  function move(e){
-    let dx = e.clientX - cx, dy = e.clientY - cy;
-    const L = Math.hypot(dx, dy) || 1;
-    const cl = Math.min(L, R);
+  moveZone.addEventListener('pointermove', e => {
+    if(e.pointerId !== mId) return;
+    const dx = e.clientX - mx0, dy = e.clientY - my0;
+    const L = Math.hypot(dx, dy) || 1, cl = Math.min(L, R);
     knob.style.transform = `translate(calc(-50% + ${dx/L*cl}px), calc(-50% + ${dy/L*cl}px))`;
     IN.mx = dx/L*(cl/R); IN.mz = -dy/L*(cl/R);
-    IN.run = L > R*0.9;
-  }
+    IN.run = L > R*0.84;
+    e.preventDefault();
+  });
+  const endMove = e => {
+    if(e.pointerId !== mId) return;
+    mId = null; IN.mx = IN.mz = 0; IN.run = false;
+    joy.classList.remove('on');
+  };
+  moveZone.addEventListener('pointerup', endMove);
+  moveZone.addEventListener('pointercancel', endMove);
+
+  /* --- bakış ve yakınlaşma --- */
+  const look = new Map();
+  let pinchD = 0, tapT = 0, tapMove = 0;
+  lookZone.addEventListener('pointerdown', e => {
+    if(!UI.modal.hidden || !started) return;
+    look.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    try{ lookZone.setPointerCapture(e.pointerId); }catch(err){}
+    if(look.size === 1){ tapT = performance.now(); tapMove = 0; }
+    if(look.size === 2){
+      const [a, b] = [...look.values()];
+      pinchD = Math.hypot(a.x-b.x, a.y-b.y);
+    }
+    e.preventDefault();
+  });
+  lookZone.addEventListener('pointermove', e => {
+    const p = look.get(e.pointerId);
+    if(!p) return;
+    const dx = e.clientX - p.x, dy = e.clientY - p.y;
+    p.x = e.clientX; p.y = e.clientY;
+    if(look.size === 1){
+      tapMove += Math.abs(dx) + Math.abs(dy);
+      camYaw -= dx*0.0062;
+      camPitch = Math.max(-0.5, Math.min(1.15, camPitch + dy*0.0046));
+    } else if(look.size === 2){
+      const [a, b] = [...look.values()];
+      const d = Math.hypot(a.x-b.x, a.y-b.y);
+      if(pinchD) camDist = Math.max(2.2, Math.min(14, camDist*pinchD/d));
+      pinchD = d;
+    }
+    e.preventDefault();
+  });
+  const endLook = e => {
+    if(!look.has(e.pointerId)) return;
+    const single = look.size === 1;
+    look.delete(e.pointerId);
+    if(!look.size) pinchD = 0;
+    if(single && tapMove < 12 && performance.now() - tapT < 300 && mode === 'play' && UI.modal.hidden){
+      throwStone(); buzz(8);
+    }
+  };
+  lookZone.addEventListener('pointerup', endLook);
+  lookZone.addEventListener('pointercancel', endLook);
+
+  /* --- eylem tuşları --- */
   const bind = (id, fn, up2) => {
     const el = $(id);
     if(!el) return;
-    el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); });
-    if(up2) el.addEventListener('pointerup', up2);
+    el.addEventListener('pointerdown', e => { e.preventDefault(); buzz(10); fn(); });
+    if(up2){ el.addEventListener('pointerup', up2); el.addEventListener('pointercancel', up2); }
+    el.addEventListener('contextmenu', e => e.preventDefault());
   };
   bind('tb-e', () => interact());
   bind('tb-stone', () => throwStone());
@@ -4094,6 +4292,33 @@ $('avatar').addEventListener('click', () => switchKid());
   bind('tb-dive', () => { IN.dive = true; }, () => { IN.dive = false; });
   bind('tb-swap', () => switchKid());
 })();
+
+/* büyük eylem tuşu bağlama göre yanar */
+function paintTouchButtons(){
+  if(!document.body.classList.contains('touch')) return;
+  const e = $('tb-e');
+  e.classList.toggle('hot', !!nearSpot || (nearShore && GS.stones < GS.maxStones));
+  $('tb-torch').classList.toggle('lock', !GS.gear.fener);
+  $('tb-torch').classList.toggle('on', GS.gear.fener && GS.tool === 'fener');
+  $('tb-stone').classList.toggle('lock', GS.stones === 0);
+  $('tb-dive').classList.toggle('on', P.swim);
+}
+
+/* tam ekran, uyku engeli, ana ekrana ekleme */
+let wakeLock = null;
+async function keepAwake(){
+  try{ if('wakeLock' in navigator && !wakeLock) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
+}
+document.addEventListener('visibilitychange', () => { if(!document.hidden) keepAwake(); });
+$('b-fs').addEventListener('click', async () => {
+  try{
+    if(document.fullscreenElement) await document.exitFullscreen();
+    else await document.documentElement.requestFullscreen({ navigationUI:'hide' });
+  }catch(e){
+    feed(IOS ? 'iPhone’da tam ekran için Paylaş → Ana Ekrana Ekle' : 'Tam ekran açılamadı', { icon:'help', hold:3200 });
+  }
+});
+$('b-quests').addEventListener('click', () => openModal('board'));
 
 /* ---------- radar: oyuncu merkezli, dönen pusulalı mini harita ---------- */
 const mini = $('mini');
@@ -4333,6 +4558,7 @@ function hitPlayer(kind){
   const lost = loseLoot(kind === 'slipper' ? 2 : 1);
   toast(kind === 'slipper' ? `Edibe terliği patlattı! ${lost} ganimet düştü` : `Sadık’ın soda şişesi değdi! ${lost} ganimet düştü`, 'bad');
   UI.flash.classList.add('on');
+  buzz([30, 40, 30]);
   setTimeout(() => UI.flash.classList.remove('on'), 200);
   refreshHUD();
 }
@@ -4654,7 +4880,9 @@ function updateShots(dt){
 /* ---------- animasyon ---------- */
 function animate(){
   requestAnimationFrame(animate);
+  if(hidden){ clock.getDelta(); return; }
   const dt = Math.min(0.05, clock.getDelta());
+  perfTick(dt);
   const t = clock.elapsedTime;
   waterUni.uTime.value = t;
 
@@ -4742,13 +4970,15 @@ function animate(){
     camLook.lerp(tmpV2.set(focus.x, focus.y + 0.22, focus.z), camInit ? 1 - Math.exp(-dt*20) : 1);
     camInit = true;
     camera.lookAt(camLook);
-    const wantFov = 50 + Math.max(0, P.spd - 0.62)*10 + (GS.under ? 4 : 0);
+    const wantFov = baseFov + Math.max(0, P.spd - 0.62)*9 + (GS.under ? 4 : 0);
     if(Math.abs(camera.fov - wantFov) > 0.05){
       camera.fov += (wantFov - camera.fov)*Math.min(1, dt*4);
       camera.updateProjectionMatrix();
     }
     target.set(P.x, P.y, P.z);
   }
+
+  skyDome.position.set(camera.position.x, 0, camera.position.z);
 
   /* su altı görünümü */
   const T = TIMES[timeKey];
@@ -4758,7 +4988,7 @@ function animate(){
     fog.density = 0.05;
     UI.uw.style.opacity = '1';
   } else {
-    fog.color.setHex(T.fog); fog.density = T.fogD;
+    fog.color.setHex(T.fog); fog.density = T.fogD*Q.fogK;
     UI.uw.style.opacity = '0';
   }
 
@@ -4824,6 +5054,7 @@ function animate(){
     }
     UI.prompt.hidden = false;
   } else { UI.prompt.hidden = true; UI.prompt.dataset.k = ''; }
+  if((miniTick % 6) === 0) paintTouchButtons();
 
   if((miniTick % 2) === 0) paintCompass();
   if((miniTick++ % 4) === 0){
@@ -4854,7 +5085,7 @@ function applyBloom(){
   bloom.threshold = GS.night ? 0.42 : 0.88;
   bloom.radius = GS.night ? 0.75 : 0.55;
 }
-if(!isPhone){
+if(Q.bloom){
   try{
     const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }] = await Promise.all([
       import('three/addons/postprocessing/EffectComposer.js'),
@@ -4876,11 +5107,51 @@ if(!isPhone){
   }catch(e){ composer = null; bloom = null; }
 }
 
-addEventListener('resize', () => {
-  camera.aspect = innerWidth/innerHeight;
+function onResize(){
+  camera.aspect = innerWidth/Math.max(1, innerHeight);
+  fitFov();
+  camera.fov = mode === 'play' ? baseFov : baseFov + 4;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
   if(composer) composer.setSize(innerWidth, innerHeight);
+  syncTape();
+}
+addEventListener('resize', onResize);
+addEventListener('orientationchange', () => setTimeout(onResize, 220));
+if(window.visualViewport) visualViewport.addEventListener('resize', onResize);
+
+/* ---- kalite kendiliğinden ayarlansın ----
+   Telefonlar çok farklı güçte; kare hızı düşerse önce parıltı, sonra gölge,
+   en son piksel oranı kısılır. Toparlarsa bir kademe geri verilir.          */
+let perfT = 0, perfN = 0, perfDrop = 0, perfGood = 0;
+function perfTick(dt){
+  perfT += dt; perfN++;
+  if(perfT < 1) return;
+  const fps = perfN/perfT;
+  perfT = 0; perfN = 0;
+  if(fps < 34 && tier > 0){
+    perfGood = 0;
+    if(++perfDrop >= 2){
+      perfDrop = 0; tier--;
+      const q = QUAL[tier];
+      renderer.setPixelRatio(Math.min(devicePixelRatio, q.dpr));
+      renderer.setSize(innerWidth, innerHeight);
+      if(composer) composer.setSize(innerWidth, innerHeight);
+      if(!q.bloom) fxOn = false;
+      if(q.shadow === 0){ renderer.shadowMap.enabled = false; sun.castShadow = false; }
+      feed('Akıcılık için görüntü kalitesi düşürüldü', { icon:'star', hold:2600 });
+    }
+  } else if(fps > 56){
+    perfDrop = 0;
+    perfGood++;
+  } else perfDrop = 0;
+}
+
+/* sekme arkaya atılınca döngü dursun — pil tüketimi düşsün */
+let hidden = false;
+document.addEventListener('visibilitychange', () => {
+  hidden = document.hidden;
+  if(!hidden){ clock.getDelta(); }
 });
 
 /* ortam yansıması herkese aynı şiddette vurmasın: cam ve metal parlar, sıva ve toprak mat kalır */
@@ -4926,6 +5197,10 @@ picksEl.addEventListener('click', e => {
 $('start').addEventListener('click', () => {
   if(started) return;
   started = true;
+  keepAwake();
+  if(MOBILE && !document.fullscreenElement && document.documentElement.requestFullscreen && !IOS){
+    document.documentElement.requestFullscreen({ navigationUI:'hide' }).catch(() => {});
+  }
   titleEl.classList.add('gone');
   setTimeout(() => { titleEl.hidden = true; }, 600);
   say(GS.who === 'ali' ? 'alya' : 'ali', 'Hadi, koya inip ganimet toplayalım!', 5);
@@ -4943,6 +5218,13 @@ window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS,
                        setTime, setMode, flyTo, toast, interact, throwStone, toggleTorch, switchKid,
                        scene, camera, renderer, THREE, setFx, fx:() => fxOn, cam:() => ({ camYaw, camPitch, camDist }),
                        setCam:(y, p2, d) => { camYaw = y; if(p2 !== undefined) camPitch = p2; if(d !== undefined) camDist = d; } };
+/* çevrimdışı oynanabilsin diye servis çalışanı — sadece kendi alan adında */
+if('serviceWorker' in navigator && location.protocol === 'https:'){
+  addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+
 try{
   const boot = window.claude?.hot?.data;
   if(boot?.p){ P.x = boot.p[0]; P.y = boot.p[1]; P.z = boot.p[2]; GS.money = boot.money || 0; Object.assign(GS.bag, boot.bag || {}); refreshHUD(); }
