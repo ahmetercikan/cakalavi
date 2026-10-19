@@ -2857,22 +2857,25 @@ function contactBlob(r){
 
 function makeHand(mat, s){
   const g = new THREE.Group();
-  const palm = new THREE.Mesh(new THREE.SphereGeometry(0.038, 12, 9), mat);
-  palm.scale.set(0.95, 1.15, 0.62); palm.position.y = -0.028; g.add(palm);
-  const fing = new THREE.Mesh(new THREE.SphereGeometry(0.033, 12, 9), mat);
-  fing.scale.set(0.9, 1.0, 0.56); fing.position.y = -0.062; g.add(fing);
-  const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.012, 0.028, 3, 7), mat);
-  thumb.position.set(s*0.028, -0.04, -0.012); thumb.rotation.set(0.3, 0, s*0.9); g.add(thumb);
+  const palm = new THREE.Mesh(new THREE.SphereGeometry(0.050, 12, 9), mat);
+  palm.scale.set(0.98, 1.12, 0.66); palm.position.y = -0.034; g.add(palm);
+  const fing = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 9), mat);
+  fing.scale.set(0.92, 1.0, 0.60); fing.position.y = -0.080; g.add(fing);
+  const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.017, 0.034, 3, 7), mat);
+  thumb.position.set(s*0.036, -0.050, -0.016); thumb.rotation.set(0.3, 0, s*0.9); g.add(thumb);
   return g;
 }
 
-/* Ali ≈ 1.40 m, Alya ≈ 1.36 m. Ölçüler gerçek çocuk oranlarından:
-   baş yüksekliğin ~1/6,5'i, bacak ~%51'i, omuz genişliği ~1,5 baş.
-   İskelet: kalça → omurga → göğüs → boyun → baş, kalça → uyluk → baldır → ayak.
-   Dizler geriye, dirsekler öne bükülür; ayak bileği adım fazına göre döner. */
+/* Karakterler gerçek çocuk oranlarıyla kuruluydu: baş boyun 1/6,5'i, uzun
+   ince uzuvlar. Bu oranlar düşük detayda manken gibi duruyor — oyunun çizgi
+   film diline de uymuyor. Yeni ölçüler oyun oranları: boy dört baş, iri
+   kafa, kısa ve kalın uzuvlar, büyük el ve ayak. Silüet uzaktan okunuyor,
+   yüz yakından okunuyor.
+   İskelet aynı: kalça → omurga → göğüs → boyun → baş, kalça → uyluk →
+   baldır → ayak. Dizler geriye, dirsekler öne bükülür.                   */
 const KID = {
-  hip:0.76, spine:0.07, chest:0.09, shoulderY:0.162, shoulderX:0.124,
-  thigh:0.36, shin:0.33, upperArm:0.25, foreArm:0.23, headY:0.375, headR:0.107,
+  hip:0.60, spine:0.07, chest:0.09, shoulderY:0.155, shoulderX:0.132,
+  thigh:0.285, shin:0.265, upperArm:0.195, foreArm:0.18, headY:0.40, headR:0.142,
 };
 
 /* --- iki kemikli uzuv derisi -------------------------------------------
@@ -2943,25 +2946,25 @@ function makeKid(cfg){
   const skin = skinMat(cfg.skin), shirt = mkMat(cfg.shirt, 0.92), shortM = mkMat(cfg.short, 0.92);
   const sleeveM = mkMat(cfg.sleeve || cfg.shirt, 0.92), hair = hairMat(cfg.hair), trim = mkMat(cfg.trim || 0xf6ecd9, 0.88);
 
-  G.add(contactBlob(0.32));
+  G.add(contactBlob(0.34));
   const body = new THREE.Group(); G.add(body);
   const hips = new THREE.Group(); hips.position.y = KID.hip; body.add(hips);
 
   /* --- kalça ve şort --- */
-  const shorts = lathe([[0.004,-0.155],[0.098,-0.158],[0.126,-0.12],[0.132,-0.05],[0.128,0.02],[0.112,0.062],[0.004,0.065]], shortM, 20);
+  const shorts = lathe([[0.004,-0.126],[0.100,-0.130],[0.130,-0.096],[0.138,-0.038],[0.136,0.022],[0.122,0.062],[0.004,0.066]], shortM, 20);
   shorts.scale.z = 0.88; hips.add(shorts);
-  const waist = new THREE.Mesh(new THREE.TorusGeometry(0.112, 0.011, 8, 22), trim);
+  const waist = new THREE.Mesh(new THREE.TorusGeometry(0.120, 0.013, 8, 22), trim);
   waist.rotation.x = Math.PI/2; waist.position.y = 0.05; waist.scale.z = 0.9; hips.add(waist);
 
   /* --- gövde --- */
   const spine = new THREE.Group(); spine.position.y = KID.spine; hips.add(spine);
   const chest = new THREE.Group(); chest.position.y = KID.chest; spine.add(chest);
-  const torso = lathe([[0.004,-0.17],[0.1,-0.166],[0.112,-0.1],[0.122,-0.02],[0.128,0.06],[0.127,0.13],[0.104,0.178],[0.055,0.194],[0.004,0.196]], shirt, 22);
-  torso.scale.z = 0.78; chest.add(torso);
-  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.044, 0.01, 8, 18), trim);
-  collar.rotation.x = Math.PI/2; collar.position.y = 0.19; collar.scale.z = 0.92; chest.add(collar);
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.042, 0.07, 12), skin);
-  neck.position.y = 0.215; chest.add(neck);
+  const torso = lathe([[0.004,-0.142],[0.112,-0.138],[0.130,-0.078],[0.142,-0.008],[0.147,0.058],[0.144,0.112],[0.118,0.152],[0.062,0.170],[0.004,0.173]], shirt, 22);
+  torso.scale.z = 0.80; chest.add(torso);
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.053, 0.012, 8, 18), trim);
+  collar.rotation.x = Math.PI/2; collar.position.y = 0.166; collar.scale.z = 0.92; chest.add(collar);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.044, 0.054, 0.072, 12), skin);
+  neck.position.y = 0.196; chest.add(neck);
 
   /* --- baş --- */
   const head = new THREE.Group(); head.position.y = KID.headY; chest.add(head);
@@ -2979,13 +2982,13 @@ function makeKid(cfg){
   const lids = [];
   for(const s of [-1, 1]){
     const e = new THREE.Group(); e.position.set(s*R*0.38, R*0.13, -R*0.78); head.add(e);
-    const w = new THREE.Mesh(new THREE.SphereGeometry(R*0.235, 14, 10), EYE_W);
+    const w = new THREE.Mesh(new THREE.SphereGeometry(R*0.27, 14, 10), EYE_W);
     w.scale.set(1, 1.04, 0.48); e.add(w);
-    const ir = new THREE.Mesh(new THREE.SphereGeometry(R*0.125, 12, 9), EYE_D);
+    const ir = new THREE.Mesh(new THREE.SphereGeometry(R*0.15, 12, 9), EYE_D);
     ir.scale.z = 0.62; ir.position.z = -R*0.12; e.add(ir);
     const gl = new THREE.Mesh(new THREE.SphereGeometry(R*0.042, 6, 5), GLINT);
     gl.position.set(-s*R*0.06, R*0.07, -R*0.2); e.add(gl);
-    const lid = new THREE.Mesh(new THREE.SphereGeometry(R*0.255, 14, 8, 0, 6.283, 0, 1.3), skin);
+    const lid = new THREE.Mesh(new THREE.SphereGeometry(R*0.29, 14, 8, 0, 6.283, 0, 1.3), skin);
     lid.scale.set(1, 0.92, 0.56); lid.position.y = R*0.1; lid.rotation.x = 1.35; e.add(lid);
     lids.push(lid);
     const br = new THREE.Mesh(new THREE.CapsuleGeometry(R*0.028, R*0.24, 3, 6), hair);
@@ -3040,50 +3043,50 @@ function makeKid(cfg){
   /* --- kollar --- */
   const arm = s => {
     const root = new THREE.Group(); root.position.set(s*KID.shoulderX, KID.shoulderY, 0); chest.add(root);
-    const L = limbSkin(0.0385, 0.0325, 0.0245, KID.upperArm, KID.foreArm, skin);
+    const L = limbSkin(0.050, 0.044, 0.034, KID.upperArm, KID.foreArm, skin);
     root.add(L.mesh);
     /* tişört kolu: omuzdan aşağı hafif açılan kumaş, üstü yuvarlak kapalı */
-    const slv = lathe([[0.002,0.052],[0.028,0.06],[0.042,0.042],[0.046,-0.01],[0.047,-0.075],
-                       [0.044,-0.125],[0.002,-0.128]], sleeveM, 16);
+    const slv = lathe([[0.002,0.058],[0.034,0.068],[0.052,0.048],[0.057,-0.012],[0.058,-0.082],
+                       [0.054,-0.134],[0.002,-0.138]], sleeveM, 16);
     slv.scale.z = 0.94; L.up.add(slv);
     const hand = makeHand(skin, s); hand.position.y = -KID.foreArm - 0.004; L.lo.add(hand);
     return { g: L.up, lo: L.lo, hand };
   };
   /* --- bacaklar: uyluk başı şortun içinde kalır --- */
   const leg = s => {
-    const root = new THREE.Group(); root.position.set(s*0.066, -0.04, 0); hips.add(root);
-    const L = limbSkin(0.05, 0.0385, 0.027, KID.thigh, KID.shin, skin);
+    const root = new THREE.Group(); root.position.set(s*0.074, -0.04, 0); hips.add(root);
+    const L = limbSkin(0.068, 0.058, 0.040, KID.thigh, KID.shin, skin);
     root.add(L.mesh);
     const g = L.up, lo = L.lo;
-    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.066, 0.13, 16), shortM);
-    cuff.position.y = -0.055; cuff.scale.z = 0.95; g.add(cuff);
+    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.086, 0.078, 0.120, 16), shortM);
+    cuff.position.y = -0.048; cuff.scale.z = 0.95; g.add(cuff);
     const foot = new THREE.Group(); foot.position.y = -KID.shin; lo.add(foot);
     /* spor ayakkabı: taban, burun kapağı, bilek yakası, bağcık */
     const shoeM = mkMat(cfg.shoe || 0xf2efe6, 0.78), soleM = mkMat(cfg.sole || 0xe2ded3, 0.95);
     const upper = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), shoeM);
-    upper.scale.set(0.038, 0.032, 0.088); upper.position.set(0, 0.012, -0.034); foot.add(upper);
+    upper.scale.set(0.050, 0.042, 0.108); upper.position.set(0, 0.016, -0.040); foot.add(upper);
     const sole = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 11), soleM);
-    sole.scale.set(0.042, 0.016, 0.098); sole.position.set(0, -0.012, -0.034); foot.add(sole);
+    sole.scale.set(0.055, 0.022, 0.120); sole.position.set(0, -0.014, -0.040); foot.add(sole);
     const toeCap = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), soleM);
-    toeCap.scale.set(0.036, 0.024, 0.03); toeCap.position.set(0, 0.002, -0.1); foot.add(toeCap);
-    const tongue = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.012, 0.05), shoeM);
-    tongue.position.set(0, 0.036, -0.022); tongue.rotation.x = 0.25; foot.add(tongue);
+    toeCap.scale.set(0.047, 0.032, 0.038); toeCap.position.set(0, 0.004, -0.122); foot.add(toeCap);
+    const tongue = new THREE.Mesh(new THREE.BoxGeometry(0.050, 0.014, 0.060), shoeM);
+    tongue.position.set(0, 0.046, -0.026); tongue.rotation.x = 0.25; foot.add(tongue);
     for(let i = 0; i < 2; i++){
-      const lace = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.005, 0.006), mkMat(cfg.lace || 0xcfc6b4, 0.9));
-      lace.position.set(0, 0.04 - i*0.008, -0.012 - i*0.022); lace.rotation.x = 0.2; foot.add(lace);
+      const lace = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.006, 0.008), mkMat(cfg.lace || 0xcfc6b4, 0.9));
+      lace.position.set(0, 0.051 - i*0.010, -0.014 - i*0.026); lace.rotation.x = 0.2; foot.add(lace);
     }
-    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.008, 7, 14), shoeM);
-    collar.rotation.x = Math.PI/2 - 0.2; collar.position.set(0, 0.04, 0.012); collar.scale.set(1.1, 1, 0.9); foot.add(collar);
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.02, 0.05), mkMat(cfg.strap || 0x3ad0c4, 0.8));
-    stripe.position.set(0.034, 0.012, -0.03); stripe.rotation.z = 0.2; foot.add(stripe);
-    const stripe2 = stripe.clone(); stripe2.position.x = -0.034; stripe2.rotation.z = -0.2; foot.add(stripe2);
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.039, 0.010, 7, 14), shoeM);
+    collar.rotation.x = Math.PI/2 - 0.2; collar.position.set(0, 0.050, 0.014); collar.scale.set(1.1, 1, 0.9); foot.add(collar);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.026, 0.062), mkMat(cfg.strap || 0x3ad0c4, 0.8));
+    stripe.position.set(0.044, 0.016, -0.036); stripe.rotation.z = 0.2; foot.add(stripe);
+    const stripe2 = stripe.clone(); stripe2.position.x = -0.044; stripe2.rotation.z = -0.2; foot.add(stripe2);
     return { g, lo, foot };
   };
   const armL = arm(-1), armR = arm(1), legL = leg(-1), legR = leg(1);
 
   /* --- sırt çantası: hep takılı; file çanta alınınca yanına ganimet filesi gelir --- */
   const packM = mkMat(cfg.pack || 0x3f6b52, 0.92), packD = mkMat(cfg.packD || 0x2f5240, 0.92);
-  const day = new THREE.Group(); day.position.set(0, 0.03, 0.082); chest.add(day);
+  const day = new THREE.Group(); day.position.set(0, 0.018, 0.092); day.scale.setScalar(1.18); chest.add(day);
   const sack = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 14), packM);
   sack.scale.set(0.105, 0.135, 0.058); day.add(sack);
   const flap = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 12, 0, 6.283, 0, 1.1), packD);
