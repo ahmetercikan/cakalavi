@@ -104,8 +104,11 @@ button:focus-visible,[role="button"]:focus-visible{outline:2px solid var(--teal)
 /* ---- pusula şeridi ---- */
 #compass{
   top:calc(10px + env(safe-area-inset-top,0px)); left:50%; transform:translateX(-50%);
-  width:min(620px, 78vw); height:40px;
+  /* ortalanmış şerit geniş tablette kimlik kartının üstüne biniyordu:
+     eni iki yandaki panellere yer bırakacak kadar                        */
+  width:min(620px, 78vw, calc(100vw - 640px)); height:40px;
 }
+@media (max-width:980px){ #compass{width:min(620px, 78vw)} }
 #compass .tape{
   position:absolute; inset:0; overflow:hidden; border-radius:13px;
   background:linear-gradient(180deg, rgba(6,24,34,.74), rgba(4,16,24,.52));
@@ -490,6 +493,21 @@ body.touch #radar,body.touch #journal,body.touch .belt{display:none}
 body.touch .tool-rail{flex-direction:row; flex-wrap:wrap; width:94px; justify-content:center; gap:6px; padding:6px}
 body.touch .tool-rail .grp{display:contents}
 body.touch .tool-rail hr{display:none}
+/* Telefonda sağ üstteki ray sekiz düğmeyle koca bir blok oluşturuyordu.
+   Artık tek bir menü düğmesinin arkasında: açılınca görünüyor, bir seçim
+   yapılınca ya da oyuna dokununca kapanıyor. Çanta ve karakter değiştirme
+   de alt kümeden buraya taşındı -- ikisi de oyun ortasında değil, arada
+   kullanılıyor.                                                          */
+.only-touch{display:none}
+body.touch .only-touch{display:grid}
+#rail-btn{display:none}
+body.touch #rail-btn{display:grid; width:38px; height:38px; place-items:center;
+  border-radius:12px; border:1px solid var(--hair); color:var(--bone-2);
+  background:rgba(8,32,44,.72); backdrop-filter:blur(8px); cursor:pointer}
+body.touch #rail-btn .ico{width:19px; height:19px}
+body.touch.rail-open #rail-btn{color:var(--teal); border-color:rgba(58,208,196,.5)}
+body.touch #hud-tr .tool-rail{display:none}
+body.touch.rail-open #hud-tr .tool-rail{display:flex}
 /* telefonda ray sadeleşir: etiket anahtarları ve parıltı yardım penceresinde kalır */
 body.touch #t-streets,body.touch #t-pois,body.touch #b-fx,
 body.touch #s-morning,body.touch #s-dusk{display:none}
@@ -556,6 +574,13 @@ body.touch #tbtns{display:grid}
 #tbtns .big.hot{border-color:var(--teal); box-shadow:0 0 26px -6px rgba(58,208,196,.8)}
 #tbtns .n{font-family:var(--mono); font-size:8.5px; color:var(--bone-3)}
 
+/* Alt kontroller ekranın dörtte birini kaplıyordu: üç sütun x üç sıra
+   düğme, yanında 118 pikselik çubuk. Artık çanta ve değiştirme rayda,
+   kalan beş düğme iki sıraya sığıyor, çubuk küçüldü.                     */
+body.touch #tb-bag, body.touch #tb-swap{display:none}
+body.touch #tbtns{grid-template-columns:repeat(3, var(--tb)); gap:8px}
+body.touch #tbtns .big{grid-column:3; grid-row:1 / span 2}
+
 /* dikey telefon: HUD sadeleşir, kontroller büyür */
 @media (orientation:portrait){
   body.touch #compass{width:min(380px,94vw); height:32px; top:calc(8px + env(safe-area-inset-top,0px))}
@@ -571,24 +596,32 @@ body.touch #tbtns{display:grid}
   }
   body.touch #objective b{font-size:11.5px}
   body.touch #hud-tl{top:calc(46px + env(safe-area-inset-top,0px)); left:max(10px,env(safe-area-inset-left,0px))}
+  /* kimlik kartı ekranın üçte ikisini kaplıyordu: konum ve unvan satırı
+     telefonda gizli, ikisi de durum çubuğunda zaten yazıyor             */
+  body.touch #hud-tl .place, body.touch #hud-tl .lvl{display:none}
+  body.touch #hud-tl .ident{padding:6px 12px 6px 6px}
+  body.touch #hud-tl .medallion{width:44px; height:44px}
   body.touch #hud-tr{top:calc(46px + env(safe-area-inset-top,0px)); right:max(10px,env(safe-area-inset-right,0px))}
-  body.touch #feed{top:auto; bottom:calc(238px + env(safe-area-inset-bottom,0px)); transform:none; max-width:66vw}
-  body.touch #hud-tr{top:calc(104px + env(safe-area-inset-top,0px))}
-  body.touch #vitals{bottom:calc(206px + env(safe-area-inset-bottom,0px))}
-  body.touch #prompt{bottom:calc(264px + env(safe-area-inset-bottom,0px))}
-  body.touch #tbtns{--tb:64px}
-  body.touch #touch{--joy:118px}
+  body.touch #feed{top:auto; bottom:calc(152px + env(safe-area-inset-bottom,0px)); transform:none; max-width:70vw}
+  body.touch #hud-tr{top:calc(46px + env(safe-area-inset-top,0px))}
+  body.touch #vitals{bottom:calc(134px + env(safe-area-inset-bottom,0px))}
+  body.touch #prompt{bottom:calc(178px + env(safe-area-inset-bottom,0px))}
+  body.touch #tbtns{--tb:52px}
+  body.touch #touch{--joy:104px}
+  body.touch #movezone{width:calc(var(--joy) + 46px); height:calc(var(--joy) + 46px)}
 }
 /* yatay telefon: her şey kenarlara yapışır */
 @media (orientation:landscape) and (max-height:520px){
-  body.touch #touch{--joy:112px}
-  body.touch #compass{width:min(420px,52vw); height:30px}
+  body.touch #touch{--joy:94px}
+  body.touch #movezone{width:calc(var(--joy) + 40px); height:calc(var(--joy) + 40px)}
+  /* dar yatayda pusula kimlik kartının üstüne biniyordu */
+  body.touch #compass{width:min(380px,44vw); height:30px}
   body.touch #objective{top:calc(42px + env(safe-area-inset-top,0px)); font-size:11px}
-  body.touch #vitals{bottom:calc(10px + env(safe-area-inset-bottom,0px)); left:auto; right:calc(240px + env(safe-area-inset-right,0px)); transform:none}
-  body.touch #prompt{bottom:calc(96px + env(safe-area-inset-bottom,0px))}
+  body.touch #vitals{bottom:calc(10px + env(safe-area-inset-bottom,0px)); left:auto; right:calc(190px + env(safe-area-inset-right,0px)); transform:none}
+  body.touch #prompt{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
   body.touch #feed{max-width:42vw; top:auto; bottom:calc(12px + env(safe-area-inset-bottom,0px));
                    left:calc(136px + env(safe-area-inset-left,0px)); right:auto; align-items:flex-start}
-  body.touch #tbtns{--tb:54px; gap:8px}
+  body.touch #tbtns{--tb:48px; gap:7px}
   body.touch .ident{padding:5px 10px 5px 6px}
   body.touch .medallion{width:40px; height:40px}
   body.touch .medallion svg.rg{inset:-3px; width:46px; height:46px}
@@ -783,6 +816,7 @@ body.touch #tbtns{display:grid}
 <symbol id="i-breath" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="14.6" r="4.4"/><circle cx="16.6" cy="8.4" r="2.8"/><circle cx="17.6" cy="16.4" r="1.6"/></symbol>
 <symbol id="i-sound" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 9.4h3.2l4.4-3.6v12.4l-4.4-3.6H4.6z"/><path d="M16 9.2a4 4 0 0 1 0 5.6"/><path d="M18.6 6.6a7.6 7.6 0 0 1 0 10.8"/></symbol>
 <symbol id="i-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 9.4h3.2l4.4-3.6v12.4l-4.4-3.6H4.6z"/><path d="m16.4 9.6 4.4 4.8M20.8 9.6l-4.4 4.8"/></symbol>
+<symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4.4 7h15.2M4.4 12h15.2M4.4 17h15.2"/></symbol>
 <symbol id="i-bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13.4 2.4 5.6 13.6h5.2l-1 8 7.8-11.4h-5z"/></symbol>
 <symbol id="i-jump" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4v10M8.2 7.2 12 3.4l3.8 3.8M4.4 19.6h15.2"/></symbol>
 <symbol id="i-hand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8.6 12.6V6a1.7 1.7 0 0 1 3.4 0v5"/><path d="M12 11V4.8a1.7 1.7 0 0 1 3.4 0V12"/><path d="M15.4 12V7.6a1.7 1.7 0 0 1 3.4 0v7.8a6 6 0 0 1-6 6h-1.2a6 6 0 0 1-6-6v-2.6a1.7 1.7 0 0 1 3.4 0"/></symbol>
@@ -830,6 +864,7 @@ body.touch #tbtns{display:grid}
 </div>
 
 <div class="hud" id="hud-tr">
+  <button class="rbtn sm" id="rail-btn" title="Menü"><svg class="ico"><use href="#i-menu"/></svg></button>
   <div class="pane tool-rail flat">
     <div class="grp">
       <button class="rbtn" id="m-play" aria-pressed="true" title="Oyun — yürü (M)"><svg class="ico"><use href="#i-walk"/></svg></button>
@@ -851,6 +886,8 @@ body.touch #tbtns{display:grid}
       <button class="rbtn sm" id="b-snd" aria-pressed="true" title="Ses (S)"><svg class="ico"><use href="#i-sound"/></svg></button>
       <button class="rbtn sm" id="b-fx" aria-pressed="true" title="Parıltı efekti (P)"><svg class="ico"><use href="#i-star"/></svg></button>
       <button class="rbtn sm" id="b-help" title="Kontroller (H)"><svg class="ico"><use href="#i-help"/></svg></button>
+      <button class="rbtn sm only-touch" id="b-bag" title="Çanta"><svg class="ico"><use href="#i-bag"/></svg></button>
+      <button class="rbtn sm only-touch" id="b-swap" title="Ali ↔ Alya"><svg class="ico"><use href="#i-swap"/></svg></button>
     </div>
   </div>
 </div>
@@ -5814,6 +5851,7 @@ const buzz = ms => { try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e)
   const look = new Map();
   let pinchD = 0, tapT = 0, tapMove = 0;
   lookZone.addEventListener('pointerdown', e => {
+    if(document.body.classList.contains('rail-open')) setRail(false);
     if(!UI.modal.hidden || !started) return;
     look.set(e.pointerId, { x:e.clientX, y:e.clientY });
     try{ lookZone.setPointerCapture(e.pointerId); }catch(err){}
@@ -5907,6 +5945,14 @@ $('b-fs').addEventListener('click', async () => {
 });
 $('b-quests').addEventListener('click', () => openModal('board'));
 $('b-snd').addEventListener('click', () => { sndInit(); sndToggle(); sfx('ui'); });
+/* Telefonda ray katlı duruyor: menü düğmesi açar, bir seçim yapılınca ya
+   da oyuna dokununca kapanır.                                           */
+const setRail = v => document.body.classList.toggle('rail-open', !!v);
+const railOpen = () => document.body.classList.contains('rail-open');
+$('rail-btn').addEventListener('click', e => { e.stopPropagation(); setRail(!railOpen()); sfx('ui'); });
+$('hud-tr').querySelector('.tool-rail').addEventListener('click', () => setRail(false));
+$('b-bag').addEventListener('click', () => (UI.modal.hidden ? openModal('bag') : closeModal()));
+$('b-swap').addEventListener('click', () => switchKid());
 
 /* ---------- radar: oyuncu merkezli, dönen pusulalı mini harita ---------- */
 const mini = $('mini');
@@ -7588,7 +7634,7 @@ window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS,
    önbelleğe hiç uğramadan soruyor; kendi numarasıyla uyuşmuyorsa bütün
    önbellekleri ve servis çalışanlarını silip bir kez yeniden yükleniyor.
    Döngüye girmesin diye tek seferlik bir işaret bırakıyor.               */
-const BUILD = '19.10.2026 15:51';
+const BUILD = '19.10.2026 16:33';
 /* Başlık ekranındaki damga elle yazılıyordu ve geride kalabiliyordu;
    artık yapı numarasının kendisinden yazılıyor.                          */
 { const el = document.getElementById('build'); if(el) el.textContent = 'sürüm ' + BUILD; }

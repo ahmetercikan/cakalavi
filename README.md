@@ -14,6 +14,10 @@ tam ekran bir uygulama gibi açılır ve çevrimdışı çalışır.
 Oyun yalnızca dokunmatik oynanır; arayüzde klavye tuşu geçmez.
 
 - **Sol altta sabit yön çubuğu:** başparmağını üstüne koy, istediğin yöne it; kenara dayanınca koşar
+- Telefonda arayüz köşelere toplanır: sağ üstteki araç rayı tek bir menü düğmesinin
+  arkasında durur, çanta ve karakter değiştirme oraya taşınmıştır, alt düğmeler
+  beş tanedir. 390×844 bir telefonda arayüzün kapladığı alan %39'dan %23'e,
+  yatayda %35'ten %19'a indi
 - **Ekrana bir kez dokun:** zıpla
 - **Ekranı sürükle:** kamerayı çevir; iki parmak → yakınlaş
 - **Sağ alt:** dal, zıpla, fener, taş, çanta, Ali↔Alya ve büyük etkileşim tuşu (yakında bir yer varsa yanar)
