@@ -879,7 +879,7 @@ body.touch #tbtns{display:grid}
     <p class="lede">Ali ve Alya bütün yazı koyda geçiriyor: kabuk, mineralli taş, bir de kimsenin istemediği delik otel terliği — hepsi ganimet. Akşam büfede satılır, gece el feneriyle çakal avına çıkılır. Kim oynuyor?</p>
     <div class="picks" id="picks"></div>
     <button class="btn go" id="start">Başla</button>
-    <p class="build">sürüm 19.10.2026 11:18</p>
+    <p class="build">sürüm 19.10.2026 11:44</p>
     <p class="legend">
       <span><kbd>Sol alt</kbd><b>yön çubuğu — ittikçe koşar</b></span>
       <span><kbd>Ekrana dokun</kbd><b>zıpla</b></span>
@@ -1415,7 +1415,8 @@ function mergeSimple(geos, colors){
 /* ---------------- sokaklar: bej parke + kiremit şerit ---------------- */
 step(.42, 'Parke taşları döşeniyor…');
 
-const BG = 1.8;
+const BG = 0.9;      /* çarpışma ve yol kotu ızgarası — kaba ızgara binaların
+                        yanını gereksiz kapatıyordu, yarıya indirildi        */
 const BGW = Math.ceil(WORLD_W/BG), BGH = Math.ceil(WORLD_H/BG);
 const blockRoad = new Uint8Array(BGW*BGH);
 const blockBld  = new Uint8Array(BGW*BGH);
@@ -1425,23 +1426,84 @@ const blockBld  = new Uint8Array(BGW*BGH);
    yürürken ayaklar asfaltın altında kalıyordu. Yol yüzeyinin kotu artık
    ayrı bir ızgarada tutuluyor ve zemin bu ikisinin yükseği oluyor.        */
 const roadY = new Float32Array(BGW*BGH).fill(-1e9);
+/* Yol kotu kare basılıyordu: köşelerde kaplamanın 1,4 katı kadar dışarı
+   taşıyor, yol kenarındaki toprakta karakter havada kalıyordu. Artık
+   yalnız merkezi kaplamanın içinde kalan hücreler işaretleniyor.          */
 function stampY(x, z, r, y){
   const i0 = Math.max(0, Math.floor((x-r-MINX)/BG)), i1 = Math.min(BGW-1, Math.ceil((x+r-MINX)/BG));
   const j0 = Math.max(0, Math.floor((z-r-MINZ)/BG)), j1 = Math.min(BGH-1, Math.ceil((z+r-MINZ)/BG));
-  for(let j = j0; j <= j1; j++) for(let i = i0; i <= i1; i++){
-    const k = j*BGW+i; if(y > roadY[k]) roadY[k] = y;
+  const r2 = r*r;
+  for(let j = j0; j <= j1; j++){
+    const cz = MINZ + (j + 0.5)*BG;
+    for(let i = i0; i <= i1; i++){
+      const cx = MINX + (i + 0.5)*BG;
+      if((cx-x)*(cx-x) + (cz-z)*(cz-z) > r2) continue;
+      const k = j*BGW+i; if(y > roadY[k]) roadY[k] = y;
+    }
   }
 }
+/* Kot hücre hücre okununca karakter her hücre sınırında zıplıyordu:
+   saniyede dokuz basamak, hem karakterde hem kamerada titreme. Artık
+   dört komşu hücre arasında doğrusal geçiş yapılıyor; yolu olmayan
+   hücrede arazi kotu kullanıldığı için kaplamanın kenarı da yumuşuyor. */
 const roadLevel = (x, z) => {
-  const i = Math.floor((x-MINX)/BG), j = Math.floor((z-MINZ)/BG);
-  return i < 0 || j < 0 || i >= BGW || j >= BGH ? -1e9 : roadY[j*BGW+i];
+  const gx = (x - MINX)/BG - 0.5, gz = (z - MINZ)/BG - 0.5;
+  const i = Math.floor(gx), j = Math.floor(gz);
+  const fx = gx - i, fz = gz - j;
+  let acc = 0, any = false;
+  for(let dj = 0; dj <= 1; dj++) for(let di = 0; di <= 1; di++){
+    const ii = i + di, jj = j + dj;
+    const w = (di ? fx : 1 - fx)*(dj ? fz : 1 - fz);
+    if(w <= 0) continue;
+    let v;
+    if(ii < 0 || jj < 0 || ii >= BGW || jj >= BGH) v = -1e9;
+    else v = roadY[jj*BGW + ii];
+    if(v < -1e8) v = terrainH(MINX + (ii + 0.5)*BG, MINZ + (jj + 0.5)*BG);
+    else any = true;
+    acc += v*w;
+  }
+  return any ? acc : -1e9;
 };
 /* karakterlerin bastığı kot: arazi ya da üstündeki yol kaplaması */
-const groundAt = (x, z) => Math.max(terrainH(x, z), roadLevel(x, z));
+const groundAt = (x, z) => {
+  const t = terrainH(x, z), r = roadLevel(x, z);
+  /* yol kotu yalnız araziden yüksekse geçerli; ızgara kaba olduğu için
+     fazladan taşan hücrelerde karakteri havaya kaldırmasın diye fark
+     sınırlanıyor                                                         */
+  return r > t ? Math.min(r, t + 1.4) : t;
+};
+/* nokta çevresine daire damgası — eskiden kare basılıyordu, köşelerde
+   yarıçapın 1,4 katı kadar fazladan alan kapanıyordu                      */
 function stamp(buf, x, z, r){
   const i0 = Math.max(0, Math.floor((x-r-MINX)/BG)), i1 = Math.min(BGW-1, Math.ceil((x+r-MINX)/BG));
   const j0 = Math.max(0, Math.floor((z-r-MINZ)/BG)), j1 = Math.min(BGH-1, Math.ceil((z+r-MINZ)/BG));
-  for(let j = j0; j <= j1; j++) for(let i = i0; i <= i1; i++) buf[j*BGW+i] = 1;
+  const r2 = r*r;
+  for(let j = j0; j <= j1; j++){
+    const cz = MINZ + (j + 0.5)*BG;
+    for(let i = i0; i <= i1; i++){
+      const cx = MINX + (i + 0.5)*BG;
+      if((cx-x)*(cx-x) + (cz-z)*(cz-z) <= r2) buf[j*BGW+i] = 1;
+    }
+  }
+}
+/* Binalar dikdörtgen: eskiden en uzun kenarın yarıçapıyla kare basılıyordu,
+   yani 20x8 metrelik bir ev 20x20 metrelik bir alanı kapatıyordu. Oyuncu
+   evin uzun yüzüne yaklaşamıyor, iki ev arasındaki boşlukta sıkışıyordu.
+   Artık binanın kendi döndürülmüş dikdörtgeni basılıyor.                  */
+function stampRect(buf, cx, cz, w, d, ang, pad){
+  const ca = Math.cos(ang), sa = Math.sin(ang);
+  const hw = w/2 + pad, hd = d/2 + pad;
+  const R = Math.hypot(hw, hd);
+  const i0 = Math.max(0, Math.floor((cx-R-MINX)/BG)), i1 = Math.min(BGW-1, Math.ceil((cx+R-MINX)/BG));
+  const j0 = Math.max(0, Math.floor((cz-R-MINZ)/BG)), j1 = Math.min(BGH-1, Math.ceil((cz+R-MINZ)/BG));
+  for(let j = j0; j <= j1; j++){
+    const pz = MINZ + (j + 0.5)*BG - cz;
+    for(let i = i0; i <= i1; i++){
+      const px = MINX + (i + 0.5)*BG - cx;
+      const u = px*ca + pz*sa, v = -px*sa + pz*ca;
+      if(Math.abs(u) <= hw && Math.abs(v) <= hd) buf[j*BGW+i] = 1;
+    }
+  }
 }
 const blocked = (buf, x, z) => {
   const i = Math.floor((x-MINX)/BG), j = Math.floor((z-MINZ)/BG);
@@ -1554,7 +1616,7 @@ for(const r of W.roads){
         const L = Math.hypot(tx, tz) || 1;
         const nx = -tz/L, nz = tx/L;
         const y = Math.max(terrainH(x - nx*hw, z - nz*hw), terrainH(x + nx*hw, z + nz*hw)) + 0.055;
-        stampY(x, z, hw*0.92, y);
+        stampY(x, z, hw*0.82, y);
       }
     }
     if(wm >= 6){
@@ -1693,7 +1755,7 @@ for(const b of W.buildings){
       pushTri(roP, roC, roI, E[0], E[1], R0, mid);
     }
   }
-  stamp(blockBld, cx, cz, Math.max(bw, bd)/2 + 0.4);
+  stampRect(blockBld, cx, cz, bw, bd, ang, 0.35);
   buildingList.push({ cx, cz, bw, bd, ang, ground, wallH, L, y1, ridgeY,
                       flat:b.roof === 'flat', alongX:alongXout, ridgeLen, wallCol:wall });
 }
@@ -1995,18 +2057,36 @@ function treeLodTick(px, pz){
 }
 
 /* begonviller */
-const bougs = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 7, 5),
-  toon({ color:0xc2417f, roughness:0.85 }), 280);
+/* Begonviller tek bir büyük pembe küreydi; duvar diplerinde balon gibi
+   duruyordu. Artık birkaç küçük çiçek ve yaprak öbeğinden oluşan bir
+   küme — aynı ucuzlukta ama bitki gibi görünüyor.                      */
+const bougGeo = (() => {
+  const parts = [], cols = [];
+  const blob = (r, x, y, z, sy) => {
+    const g = new THREE.SphereGeometry(r, 6, 5);
+    g.scale(1, sy || 0.82, 1); g.translate(x, y, z);
+    return g;
+  };
+  const F = new THREE.Color(0xc2417f), F2 = new THREE.Color(0xa83468), L = new THREE.Color(0x4e7a46);
+  parts.push(blob(0.62, 0, 0.56, 0));         cols.push(F);
+  parts.push(blob(0.46, -0.52, 0.34, 0.14));  cols.push(F2);
+  parts.push(blob(0.42, 0.50, 0.40, -0.12));  cols.push(F);
+  parts.push(blob(0.38, 0.06, 0.98, 0.10));   cols.push(F2);
+  parts.push(blob(0.44, -0.16, 0.16, -0.30)); cols.push(L);
+  parts.push(blob(0.36, 0.30, 0.14, 0.34));   cols.push(L);
+  return mergeSimple(parts, cols);
+})();
+const bougs = new THREE.InstancedMesh(bougGeo, toon({ vertexColors:true, rim:0.3 }), 280);
 let nb = 0;
 for(const b of buildingList){
   if(nb >= bougs.count || rand() < 0.5) continue;
   const ca = Math.cos(b.ang), sa = Math.sin(b.ang);
   const u = (rand()-0.5)*b.bw, v = (rand() < 0.5 ? -1 : 1)*(b.bd/2 + 1.0);
   const x = b.cx + u*ca - v*sa, z = b.cz + u*sa + v*ca;
-  dummy.position.set(x, terrainH(x, z) + 0.7, z);
+  dummy.position.set(x, terrainH(x, z) - 0.05, z);
   dummy.rotation.set(0, rand()*6.3, 0);
-  const s = 0.75 + rand()*0.6;
-  dummy.scale.set(s, s*0.85, s);
+  const s = 0.85 + rand()*0.55;
+  dummy.scale.set(s, s*(0.9 + rand()*0.35), s);
   dummy.updateMatrix();
   bougs.setMatrixAt(nb++, dummy.matrix);
 }
@@ -2507,11 +2587,15 @@ for(const p of W.pois){
   const [x, z] = clearSpot(x0, z0, kind === 'sport' || kind === 'cafe' ? 34 : 24, wantDry);
   const h = Math.max(kind === 'bay' ? 0.35 : 0.3, terrainH(x, z));
 
-  const el2 = document.createElement('div');
-  el2.className = 'lbl';
-  el2.innerHTML = `<span class="pin" style="background:${meta.c}"></span>${p.name}`;
-  labelHost.appendChild(el2);
-  markers.push({ el:el2, pos:new THREE.Vector3(x, h + (kind === 'tower' ? 12.5 : 4.6), z), kind:'poi' });
+  /* Harita üstünde yalnız koy adları duruyor: site, sokak ve adres
+     etiketleri oyunu bir harita uygulamasına çeviriyordu.                 */
+  if(kind === 'bay'){
+    const el2 = document.createElement('div');
+    el2.className = 'lbl';
+    el2.innerHTML = `<span class="pin" style="background:${meta.c}"></span>${p.name}`;
+    labelHost.appendChild(el2);
+    markers.push({ el:el2, pos:new THREE.Vector3(x, h + 4.6, z), kind:'poi' });
+  }
 
   const g = poiProp(kind, p.id);
   g.position.set(x, h, z);
@@ -2524,27 +2608,11 @@ for(const p of W.pois){
   p._color = meta.c; p._desc = meta.t;
 }
 
-for(const [, g] of streetGroups){
-  const x = g.x/g.n, z = g.z/g.n;
-  const el2 = document.createElement('div');
-  el2.className = 'lbl street';
-  el2.textContent = g.name;
-  labelHost.appendChild(el2);
-  markers.push({ el:el2, pos:new THREE.Vector3(x, Math.max(0.4, terrainH(x, z)) + 1.6, z), kind:'street' });
-}
-
-for(const a of (W.areas || [])){
-  const x = px2x(a.x), z = pz2z(a.y);
-  const el2 = document.createElement('div');
-  el2.className = 'lbl street';
-  el2.textContent = a.name;
-  labelHost.appendChild(el2);
-  markers.push({ el:el2, pos:new THREE.Vector3(x, Math.max(0.4, terrainH(x, z)) + 4.0, z), kind:'street' });
-}
+/* sokak adları ve site/alan adları artık haritada gösterilmiyor */
 
 const placesEl = document.getElementById('places');
-const ORDER = ['denizkent','denizkizi_koyu','meltem_koyu','edibe_sadik','sakiz_korulugu','cocuk_parki','basketbol','su_deposu','mistral_cafe','mistral_sitesi','akturizm_parki','villa_balaban','yazlik','tarabya'];
-for(const p of [...W.pois].sort((a,b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id))){
+/* listede de yalnız koylar var — site, sokak ve adres adları verilmiyor */
+for(const p of W.pois.filter(q => q.kind === 'bay')){
   const btn = document.createElement('button');
   btn.className = 'row';
   btn.innerHTML = `<span class="dot" style="background:${p._color}"></span><span><b>${p.name}</b><small>${p._desc}</small></span>`;
@@ -2954,7 +3022,13 @@ function limbSkin(rTop, rMid, rBot, lenUp, lenLo, mat){
    koşma, zıplama, düşme, eşya alma, elde tutma. Hareket artık elle
    yazılmış eklem açılarıyla değil, bu kliplerle sürülüyor.
    Model 0,66 birim boyunda; oyun ölçeğine büyütülüyor.                   */
-const MINI_SC = 1.62;
+const MINI_SC = 1.52;
+/* Paket karakterleri tombul bebek oranında (iki baş boyu). Çocuk gibi
+   dursunlar diye bacak ve gövde kemikleri uzatılıyor, baş ve kollar
+   gövdenin uzamasından etkilenmesin diye ters ölçekleniyor. Klipler
+   ölçek kanalını yalnız kullanmadığımız "static" klibinde oynattığı
+   için bu değerler kalıcı.                                            */
+const MINI_LEG = 2.15, MINI_TORSO = 1.42, MINI_ARM = 1.3;
 function makeMini(gltf, cfg){
   const G = new THREE.Group();
   /* yüzme eğimi ve sendeleme için ara grup; model kendi içinde döndürülüyor
@@ -2970,23 +3044,42 @@ function makeMini(gltf, cfg){
   root.traverse(o => {
     if(!o.isMesh) return;
     const m = new THREE.MeshToonMaterial({ map:o.material.map, gradientMap:RAMP_CLOTH });
-    if(m.map) m.map.colorSpace = THREE.SRGBColorSpace;
-    rimLight(m, 0.24);
+    if(m.map){
+      /* colormap bir renk paleti atlası: yumuşak süzgeç ve mipmap komşu
+         kareleri birbirine karıştırıp renkleri çamurlaştırıyor, uzaktan
+         ayrıntı kayboluyor. Keskin süzgeç her üçgene kendi düz rengini
+         veriyor.                                                        */
+      m.map.colorSpace = THREE.SRGBColorSpace;
+      m.map.magFilter = THREE.NearestFilter;
+      m.map.minFilter = THREE.NearestFilter;
+      m.map.generateMipmaps = false;
+      m.map.needsUpdate = true;
+    }
+    rimLight(m, 0.34);
     o.material = m;
     o.castShadow = o.receiveShadow = true;
     o.frustumCulled = false;
   });
   const B = {};
   root.traverse(o => { if(o.isBone) B[o.name] = o; });
+  for(const k of ['leg-left', 'leg-right']) if(B[k]) B[k].scale.y = MINI_LEG;
+  if(B['torso']){
+    B['torso'].scale.y = MINI_TORSO;
+    /* gövdenin uzaması başı ve kolları da uzatmasın; baş ayrıca biraz
+       küçültülüyor, paket oranında kafa gövdenin yarısı kadardı        */
+    if(B['head']) B['head'].scale.set(0.84, 0.84/MINI_TORSO, 0.84);
+    for(const k of ['arm-left', 'arm-right'])
+      if(B[k]) B[k].scale.set(1, MINI_ARM/MINI_TORSO, 1);
+  }
   /* sağ kolun ucunda eşya tutacağı — fener, çakı, taş buraya takılıyor.
      Kemik zinciri modelin ölçeğini taşıdığı için ters ölçek veriliyor.  */
   const hand = new THREE.Group();
-  hand.position.set(0, -0.15, 0.02);
-  hand.scale.setScalar(0.62/MINI_SC);
+  hand.position.set(0, -0.17, 0.02);
+  hand.scale.set(0.62/MINI_SC, 0.62/(MINI_SC*MINI_ARM), 0.62/MINI_SC);
   (B['arm-right'] || root).add(hand);
   /* sırt çantası */
   const pack = new THREE.Group();
-  pack.position.set(0, 0.1, 0.17); pack.scale.setScalar(1/MINI_SC);
+  pack.position.set(0, 0.12, 0.17); pack.scale.set(1/MINI_SC, 1/(MINI_SC*MINI_TORSO), 1/MINI_SC);
   (B['torso'] || root).add(pack);
   const packM = mkMat(cfg.pack || 0x3f6b52), packD = mkMat(cfg.packD || 0x2f5240);
   const sack = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), packM);
@@ -3809,13 +3902,8 @@ const SPOTS = [];
   SPOTS.push({ id:'pano', kind:'board', name:'Muhtarlık Panosu', x:px_, z:pz_ + 1.6, r:3.4,
                hint:'görevleri oku' });
 })();
-for(const s of SPOTS){
-  const el = document.createElement('div');
-  el.className = 'lbl';
-  el.innerHTML = `<span class="pin" style="background:#f0b64a"></span>${s.name}`;
-  document.getElementById('labels').appendChild(el);
-  markers.push({ el, pos:new THREE.Vector3(s.x, terrainH(s.x, s.z) + 4.4, s.z), kind:'poi' });
-}
+/* büfe, hurdacı ve pano da haritada etiketsiz; adları yaklaşınca
+   etkileşim balonunda çıkıyor                                            */
 
 /* ---------- oyuncu, arkadaş, düşmanlar, çakallar ---------- */
 const HOME = [px2x(648), pz2z(648)];
@@ -4291,46 +4379,66 @@ const PEB_COL = [new THREE.Color(0xb3a789), new THREE.Color(0xa8a393), new THREE
                  new THREE.Color(0x8e8c7c), new THREE.Color(0xa8a393), new THREE.Color(0xc2b596)];
 const dcat = new THREE.Object3D();
 let scatterAt = null;
+/* Serpinti (ot, çakıl, çalı) her tazelemede baştan rastgele üretiliyordu:
+   oyuncu on metre yürüyünce bütün otlar ve taşlar bir anda değişiyor,
+   yoktan yeni bir taş öbeği beliriyordu. Artık her bitki bulunduğu
+   karenin koordinatından türetilen bir sayıya bağlı — aynı yerde hep
+   aynı ot bitiyor. Oyuncu yürüdükçe yalnız menzilin kenarı değişiyor. */
+function hashAt(i, j, salt){
+  let h = Math.imul(i | 0, 374761393) + Math.imul(j | 0, 668265263) + Math.imul(salt | 0, 1442695041);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0)/4294967296;
+}
 function scatter(cx, cz){
   scatterAt = [cx, cz];
-  const R = 26;
+  const R = 26, STEP = 1.25, R2 = R*R;
+  const gi0 = Math.round(cx/STEP), gj0 = Math.round(cz/STEP);
+  const n = Math.ceil(R/STEP);
+  const dens = 0.64*Math.min(1, Q.scatter + 0.18);   /* kademeye göre seyrelme */
   let ti = 0, pi = 0, bi = 0;
-  for(let k = 0; k < 1600 && (ti < TUFT_N || pi < PEB_N || bi < BUSH_N); k++){
-    const a = rand()*6.283, r = Math.sqrt(rand())*R;
-    const x = cx + Math.cos(a)*r, z = cz + Math.sin(a)*r;
-    const h = terrainH(x, z);
-    if(h < 0.12) continue;
-    const ci = Math.min(GW-1, Math.max(0, Math.round((x - MINX)/GSTEP)));
-    const cj = Math.min(GH-1, Math.max(0, Math.round((z - MINZ)/GSTEP)));
-    const cov = W.cover[cj][ci] || 0;
-    const onRoad = blocked(blockRoad, x, z);
-    if(blocked(blockBld, x, z)) continue;
-    const sandy = sandCell[cj*GW+ci] === 1 || h < 1.6;
-    const wantPeb = onRoad ? false : (sandy || cov === 1 || cov === 4 || rand() < 0.25);
-    if(wantPeb && pi < PEB_N){
-      dcat.position.set(x, h, z);
-      dcat.rotation.set(rand()*3, rand()*6.3, rand()*3);
-      const sc = (0.5 + rand()*1.1)*PEB_K;
-      dcat.scale.set(sc, sc*(0.6 + rand()*0.6), sc);
-      dcat.updateMatrix(); pebs.setMatrixAt(pi, dcat.matrix);
-      pebs.setColorAt(pi, PEB_COL[cov].clone().multiplyScalar(0.85 + rand()*0.3));
-      pi++;
-    } else if(!onRoad && !sandy && bushes && bi < BUSH_N && (cov === 2 || cov === 3) && rand() < 0.3){
-      dcat.position.set(x, h - 0.04, z);
-      dcat.rotation.set(0, rand()*6.3, 0);
-      const sc = 0.7 + rand()*0.75;
-      dcat.scale.set(sc, sc*(0.8 + rand()*0.5), sc);
-      dcat.updateMatrix(); bushes.setMatrixAt(bi, dcat.matrix);
-      bushes.setColorAt(bi, BUSH_COL[rand() < 0.5 ? 0 : 1].clone().multiplyScalar(0.84 + rand()*0.3));
-      bi++;
-    } else if(!onRoad && !sandy && ti < TUFT_N){
-      dcat.position.set(x, h - 0.02, z);
-      dcat.rotation.set(0, rand()*6.3, 0);
-      const sc = 0.6 + rand()*0.9;
-      dcat.scale.set(sc, sc*(0.7 + rand()*0.8), sc);
-      dcat.updateMatrix(); tufts.setMatrixAt(ti, dcat.matrix);
-      tufts.setColorAt(ti, TUFT_COL[cov].clone().multiplyScalar(0.82 + rand()*0.36));
-      ti++;
+  for(let dj = -n; dj <= n && (ti < TUFT_N || pi < PEB_N || bi < BUSH_N); dj++){
+    for(let di = -n; di <= n; di++){
+      const gi = gi0 + di, gj = gj0 + dj;
+      const h0 = hashAt(gi, gj, 1);
+      if(h0 > dens) continue;
+      const x = gi*STEP + (hashAt(gi, gj, 2) - 0.5)*STEP*0.95;
+      const z = gj*STEP + (hashAt(gi, gj, 3) - 0.5)*STEP*0.95;
+      if((x - cx)*(x - cx) + (z - cz)*(z - cz) > R2) continue;
+      const h = terrainH(x, z);
+      if(h < 0.12) continue;
+      const ci = Math.min(GW-1, Math.max(0, Math.round((x - MINX)/GSTEP)));
+      const cj = Math.min(GH-1, Math.max(0, Math.round((z - MINZ)/GSTEP)));
+      const cov = W.cover[cj][ci] || 0;
+      const onRoad = blocked(blockRoad, x, z);
+      if(blocked(blockBld, x, z)) continue;
+      const sandy = sandCell[cj*GW+ci] === 1 || h < 1.6;
+      const a = hashAt(gi, gj, 4), b = hashAt(gi, gj, 5), c = hashAt(gi, gj, 6), e = hashAt(gi, gj, 7);
+      const wantPeb = onRoad ? false : (sandy || cov === 1 || cov === 4 || a < 0.25);
+      if(wantPeb && pi < PEB_N){
+        dcat.position.set(x, h, z);
+        dcat.rotation.set(a*3, b*6.3, c*3);
+        const sc = (0.5 + b*1.1)*PEB_K;
+        dcat.scale.set(sc, sc*(0.6 + c*0.6), sc);
+        dcat.updateMatrix(); pebs.setMatrixAt(pi, dcat.matrix);
+        pebs.setColorAt(pi, PEB_COL[cov].clone().multiplyScalar(0.85 + e*0.3));
+        pi++;
+      } else if(!onRoad && !sandy && bushes && bi < BUSH_N && (cov === 2 || cov === 3) && a < 0.3){
+        dcat.position.set(x, h - 0.04, z);
+        dcat.rotation.set(0, b*6.3, 0);
+        const sc = 0.7 + c*0.75;
+        dcat.scale.set(sc, sc*(0.8 + e*0.5), sc);
+        dcat.updateMatrix(); bushes.setMatrixAt(bi, dcat.matrix);
+        bushes.setColorAt(bi, BUSH_COL[c < 0.5 ? 0 : 1].clone().multiplyScalar(0.84 + e*0.3));
+        bi++;
+      } else if(!onRoad && !sandy && ti < TUFT_N){
+        dcat.position.set(x, h - 0.02, z);
+        dcat.rotation.set(0, b*6.3, 0);
+        const sc = 0.6 + c*0.9;
+        dcat.scale.set(sc, sc*(0.7 + e*0.8), sc);
+        dcat.updateMatrix(); tufts.setMatrixAt(ti, dcat.matrix);
+        tufts.setColorAt(ti, TUFT_COL[cov].clone().multiplyScalar(0.82 + e*0.36));
+        ti++;
+      }
     }
   }
   dcat.scale.setScalar(0); dcat.updateMatrix();
@@ -4964,13 +5072,15 @@ const sunDir = new THREE.Vector3(), sunRight = new THREE.Vector3(),
       sunUp = new THREE.Vector3(), sunSnap = new THREE.Vector3();
 let miniTick = 0, lootTick = 0;
 
+/* HUD'da sokak adresi yerine en yakın koyun adı yazıyor */
+const BAYS = W.pois.filter(p => p.kind === 'bay').map(p => ({ n:p.name, x:px2x(p.x), z:pz2z(p.y) }));
 function nearestStreet(x, z){
   let best = '', bd = 1e9;
-  for(const [, g] of streetGroups){
-    const d = (g.x/g.n - x)**2 + (g.z/g.n - z)**2;
-    if(d < bd){ bd = d; best = g.name; }
+  for(const b of BAYS){
+    const d = (b.x - x)**2 + (b.z - z)**2;
+    if(d < bd){ bd = d; best = b.n; }
   }
-  return bd < 180*180 ? best : 'Denizkent';
+  return bd < 260*260 ? best : 'Denizkent';
 }
 function slide(ent, dx, dz){
   const ox = ent.x, oz = ent.z;
@@ -5341,7 +5451,7 @@ function animate(){
   updateNPC(dt, t);
   updateShots(dt);
   lootNear(dt, t);
-  if(!scatterAt || (P.x - scatterAt[0])**2 + (P.z - scatterAt[1])**2 > 100) scatter(P.x, P.z);
+  if(!scatterAt || (P.x - scatterAt[0])**2 + (P.z - scatterAt[1])**2 > 36) scatter(P.x, P.z);
   if(TREE_LOD && (miniTick % 8) === 0) treeLodTick(P.x, P.z);
 
   /* ganimet geri gelir (dalgalar yeni kabuk bırakır) */
@@ -5395,19 +5505,23 @@ function animate(){
   } else {
     /* omuz üstü bakış: hedef biraz sağa kayar, kamera yumuşatılır */
     const rgx = Math.cos(camYaw), rgz = -Math.sin(camYaw);
-    camFocusY = camInit ? camFocusY + (P.y + 1.24 - camFocusY)*(1 - Math.exp(-dt*13)) : P.y + 1.24;
+    /* koşarken daha çok yumuşatılıyor: hızlı giderken arazinin iniş
+       çıkışı kameraya birebir geçmesin                                  */
+    const smY = 13 - Math.max(0, P.spd - 0.5)*7;
+    camFocusY = camInit ? camFocusY + (P.y + 1.24 - camFocusY)*(1 - Math.exp(-dt*smY)) : P.y + 1.24;
     const focus = tmpF.set(P.x + rgx*0.32, camFocusY, P.z + rgz*0.32);
     let d = camDist;
     const cx = Math.sin(camYaw)*Math.cos(camPitch), cy = Math.sin(camPitch), cz = Math.cos(camYaw)*Math.cos(camPitch);
-    for(let st = 1.4; st < d; st += 1.1){
+    for(let st = 1.2; st < d; st += 0.6){
       if(blocked(blockBld, focus.x + cx*st, focus.z + cz*st)){ d = Math.max(1.9, st - 0.5); break; }
     }
     camDistNow = camInit ? camDistNow + (d - camDistNow)*(1 - Math.exp(-dt*9)) : d;
     const dd = camDistNow;
     camWant.set(focus.x + cx*dd, focus.y + cy*dd + 0.36, focus.z + cz*dd);
     if(!GS.under){
-      const minY = terrainH(camWant.x, camWant.z) + 0.6;
-      if(camWant.y < minY) camWant.y = minY;
+      /* yere gömülmesin diye yükseltirken sert sıçrama olmasın */
+      const minY = groundAt(camWant.x, camWant.z) + 0.6;
+      if(camWant.y < minY) camWant.y += (minY - camWant.y)*Math.min(1, dt*10);
     }
     camera.position.lerp(camWant, camInit ? 1 - Math.exp(-dt*16) : 1);
     camLook.lerp(tmpV2.set(focus.x, focus.y + 0.22, focus.z), camInit ? 1 - Math.exp(-dt*20) : 1);
@@ -5756,7 +5870,7 @@ window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS,
                        setTime, setMode, flyTo, toast, interact, throwStone, toggleTorch, switchKid,
                        scene, camera, renderer, THREE, setFx, fx:() => fxOn, cam:() => ({ camYaw, camPitch, camDist }),
                        post:() => ({ composer, stylize, bloom, applyGrade, toonMats, RAMP, RAMP_SOFT, RAMP_HARD, hemi, sun }),
-                       ground:{ terrainH, roadLevel, groundAt, blocked, blockRoad },
+                       ground:{ terrainH, roadLevel, groundAt, blocked, blockRoad, blockBld },
                        setCam:(y, p2, d) => { camYaw = y; if(p2 !== undefined) camPitch = p2; if(d !== undefined) camDist = d; } };
 /* çevrimdışı oynanabilsin diye servis çalışanı — sadece kendi alan adında */
 /* Yeni sürüm yayınlandığında eski sayfa açık kalmasın: servis çalışanı

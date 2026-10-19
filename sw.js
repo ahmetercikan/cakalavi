@@ -5,7 +5,7 @@
    dakika boyunca eski sayfayı ağa hiç sormadan sunabiliyor. Bu yüzden HTML
    ve harita verisi {cache:'reload'} ile isteniyor — tarayıcı önbelleği
    atlanıyor, cevap bizim önbelleğimize yazılıyor.                          */
-const V = 'cakalavi-v9';
+const V = 'cakalavi-v10';
 const CORE = ['./', './index.html', './world.json', './manifest.webmanifest',
               './icon-192.png', './icon-512.png'];
 
