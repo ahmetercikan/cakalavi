@@ -48,9 +48,14 @@ kendiliğinden iner. Test için `?tier=0..3` ve `?desktop=1` parametreleri vard�
 
 ## Varlıklar
 
+Ali ve Alya, Kenney'in **Mini Characters** paketinden (CC0, https://kenney.nl)
+gelen hazır karakterler. Otuz iki animasyon klibi paketle birlikte geliyor;
+oyun durma, yürüme, koşma, zıplama, düşme, eşya alma ve elde tutma
+kliplerini kullanıyor. Karakter başına 723-876 üçgen.
+
 `assets/` altındaki kaya, çakıl, çalı ve ağaç modelleri Quaternius'un **Stylized Nature
 MegaKit** paketinden (CC0, https://quaternius.com) alınmıştır. Dokuları
-çıkarılmış, yerine oyunun kendi düz toon renkleri uygulanmıştır; toplam ~550 KB.
+çıkarılmış, yerine oyunun kendi düz toon renkleri uygulanmıştır; toplam ~1 MB.
 Model dosyaları zorunlu değildir — yüklenemezlerse oyun prosedürel geometriyle
 çalışmaya devam eder.
 

@@ -930,7 +930,7 @@ try {
    modeller; oyun kendi düz toon renklerini uyguluyor, dosyalar bu yüzden
    küçük (toplam ~180 KB). Yüklenemezlerse oyun eski prosedürel geometriyle
    çalışmaya devam ediyor — model dosyaları zorunlu değil.                 */
-const PROP = { rock:[], pebble:[], bush:null, tree:{} };
+const PROP = { rock:[], pebble:[], bush:null, tree:{}, kid:{} };
 /* modeli tabanı sıfırda, yatayda ortalı ve bir metre boyunda hale getirir */
 function normProp(geo){
   const g = geo.clone();
@@ -950,7 +950,8 @@ try {
   const loader = new GLTFLoader();
   const want = [['rock','Rock_Medium_1'], ['rock','Rock_Medium_2'], ['rock','Rock_Medium_3'],
                 ['pebble','Pebble_Round_1'], ['pebble','Pebble_Round_2'], ['pebble','Pebble_Round_3'],
-                ['bush','Bush_Common'], ['pine','Pine_5'], ['olive','CommonTree_5']];
+                ['bush','Bush_Common'], ['pine','Pine_5'], ['olive','CommonTree_5'],
+                ['kidA','ali'], ['kidB','alya']];
   const got = await Promise.all(want.map(([k, n]) =>
     loader.loadAsync('assets/' + n + '.glb').then(r => [k, r]).catch(() => [k, null])));
   /* ağaçta gövde ve yaprak ayrı parçalar: ikisini düz birer renge boyayıp
@@ -958,6 +959,7 @@ try {
   const TREE_COL = { pine:[0x5f4a35, 0x3d6b3c], olive:[0x5e4a36, 0x6b8c4a] };
   for(const [k, r] of got){
     if(!r) continue;
+    if(k === 'kidA' || k === 'kidB'){ PROP.kid[k] = r; continue; }
     if(TREE_COL[k]){
       const parts = [], cols = [];
       r.scene.traverse(o => {
@@ -2941,6 +2943,109 @@ function limbSkin(rTop, rMid, rBot, lenUp, lenLo, mat){
   return { mesh, up, lo };
 }
 
+/* ---------- hazır karakterler --------------------------------------------
+   Ali ve Alya elle kurulmuş gövdelerdi; gerçek oran da oyun oranı da
+   denendi, ikisi de istenen görüntüyü vermedi. Artık Kenney'in "Mini
+   Characters" paketinden (CC0) geliyorlar: tombul, düz renk, okunaklı
+   silüet ve en önemlisi otuz iki hazır animasyon klibi -- durma, yürüme,
+   koşma, zıplama, düşme, eşya alma, elde tutma. Hareket artık elle
+   yazılmış eklem açılarıyla değil, bu kliplerle sürülüyor.
+   Model 0,66 birim boyunda; oyun ölçeğine büyütülüyor.                   */
+const MINI_SC = 1.62;
+function makeMini(gltf, cfg){
+  const G = new THREE.Group();
+  /* yüzme eğimi ve sendeleme için ara grup; model kendi içinde döndürülüyor
+     çünkü Kenney karakterleri +Z'ye bakıyor, oyunun ileri yönü -Z        */
+  const body = new THREE.Group();
+  const root = gltf.scene;
+  root.scale.setScalar(MINI_SC);
+  root.rotation.y = Math.PI;
+  body.add(root);
+  G.add(contactBlob(0.30));
+  G.add(body);
+  /* paketin PBR malzemesi yerine oyunun toon ışığı, doku atlası korunuyor */
+  root.traverse(o => {
+    if(!o.isMesh) return;
+    const m = new THREE.MeshToonMaterial({ map:o.material.map, gradientMap:RAMP_CLOTH });
+    if(m.map) m.map.colorSpace = THREE.SRGBColorSpace;
+    rimLight(m, 0.24);
+    o.material = m;
+    o.castShadow = o.receiveShadow = true;
+    o.frustumCulled = false;
+  });
+  const B = {};
+  root.traverse(o => { if(o.isBone) B[o.name] = o; });
+  /* sağ kolun ucunda eşya tutacağı — fener, çakı, taş buraya takılıyor.
+     Kemik zinciri modelin ölçeğini taşıdığı için ters ölçek veriliyor.  */
+  const hand = new THREE.Group();
+  hand.position.set(0, -0.15, 0.02);
+  hand.scale.setScalar(0.62/MINI_SC);
+  (B['arm-right'] || root).add(hand);
+  /* sırt çantası */
+  const pack = new THREE.Group();
+  pack.position.set(0, 0.1, 0.17); pack.scale.setScalar(1/MINI_SC);
+  (B['torso'] || root).add(pack);
+  const packM = mkMat(cfg.pack || 0x3f6b52), packD = mkMat(cfg.packD || 0x2f5240);
+  const sack = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), packM);
+  sack.scale.set(0.115, 0.14, 0.07); pack.add(sack);
+  const flap = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10, 0, 6.283, 0, 1.1), packD);
+  flap.scale.set(0.118, 0.1, 0.074); flap.position.y = 0.06; pack.add(flap);
+  pack.visible = false;
+
+  const mixer = new THREE.AnimationMixer(root);
+  const act = {};
+  for(const c of gltf.animations) act[c.name] = mixer.clipAction(c);
+  for(const k of ['jump', 'fall', 'pick-up', 'attack-melee-right']){
+    if(act[k]){ act[k].setLoop(THREE.LoopOnce); act[k].clampWhenFinished = true; }
+  }
+  if(act.idle) act.idle.play();
+  G.userData = { mini:{ mixer, act, cur:'idle', airT:0, body },
+                 pack, armR:{ hand }, head:B['head'] || root,
+                 spd:0, throwT:0, pickT:0, cfg };
+  return G;
+}
+/* durum → klip. Yürüme ve koşma hızı oynatma hızına bağlanıyor ki
+   ayaklar yerde kaymasın; klip geçişleri yumuşak erimeyle yapılıyor.    */
+function animMini(k, st, dt){
+  const u = k.userData, M = u.mini;
+  u.spd = lp(u.spd, Math.min(1, st.spd), dt*9);
+  if(u.throwT > 0) u.throwT -= dt;
+  if(u.pickT > 0) u.pickT -= dt;
+  M.airT = st.air ? M.airT + dt : 0;
+
+  let want = 'idle', rate = 1;
+  if(st.swim){ want = 'sprint'; rate = 0.75; }
+  else if(st.air) want = M.airT > 0.18 ? 'fall' : 'jump';
+  else if(u.spd > 0.55){ want = 'sprint'; rate = 0.75 + u.spd*0.6; }
+  else if(u.spd > 0.06){ want = 'walk'; rate = 0.55 + u.spd*1.5; }
+  else if(st.torch) want = 'holding-right';
+  if(u.pickT > 0) want = 'pick-up';
+  if(u.throwT > 0) want = 'attack-melee-right';
+  if(!M.act[want]) want = 'idle';
+
+  if(want !== M.cur){
+    const from = M.act[M.cur], to = M.act[want];
+    if(to){
+      to.reset(); to.enabled = true; to.setEffectiveWeight(1);
+      if(to.loop === THREE.LoopOnce) to.time = 0;
+      to.play();
+      if(from && from !== to) from.crossFadeTo(to, 0.16, false);
+    }
+    M.cur = want;
+  }
+  const a = M.act[M.cur];
+  if(a) a.setEffectiveTimeScale(rate);
+  M.mixer.update(dt);
+
+  /* yüzerken gövde öne yatar, dalışta daha dik */
+  const b = M.body;
+  const tilt = st.dive ? -1.25 : (st.swim ? -1.1 : 0);
+  b.rotation.x = lp(b.rotation.x, tilt, dt*6);
+  b.position.y = lp(b.position.y, st.swim ? 0.26 : 0, dt*6);
+  /* sendeleme */
+  b.rotation.z = lp(b.rotation.z, st.stun > 0 ? Math.sin(st.stun*22)*0.2 : 0, dt*10);
+}
+
 function makeKid(cfg){
   const G = new THREE.Group();
   const skin = skinMat(cfg.skin), shirt = mkMat(cfg.shirt, 0.92), shortM = mkMat(cfg.short, 0.92);
@@ -3132,6 +3237,7 @@ const pos = v => Math.max(0, v);
 
 function animKid(k, s, dt){
   const u = k.userData;
+  if(u.mini){ animMini(k, s, dt); return; }
   u.spd = lp(u.spd, Math.min(1, s.spd), dt*9);
   const spd = u.spd, run = Math.max(0, spd - 0.62)/0.38;
   u.ph += dt*(s.swim ? 4.6 : (3.2 + spd*7.6));
@@ -3279,13 +3385,16 @@ function animKid(k, s, dt){
   }
 }
 
+const ALI_CFG  = { skin:0xe3ab80, shirt:0x3f86b4, sleeve:0x356f96, short:0x27455a, hair:0x2a1f16,
+                   shoe:0xf2efe6, sole:0xdcd7c9, strap:0x3f86b4, lace:0xcfc6b4, cap:0xf4705a, trim:0xf6ecd9,
+                   pack:0x3f6b52, packD:0x2d5240, scale:1.0 };
+const ALYA_CFG = { skin:0xf0c49c, shirt:0xf4705a, sleeve:0xe06552, short:0x3ad0c4, hair:0x4a2f1e,
+                   shoe:0xfbf5e8, sole:0xe6ddc9, strap:0xf4705a, lace:0xe9c47f, band:0xefb455, trim:0xffe3b0,
+                   pack:0xe0785f, packD:0xb95844, scale:0.965 };
+/* model yüklendiyse hazır karakter, yüklenemediyse eski elle çizilmiş gövde */
 const KIDS = {
-  ali:  makeKid({ skin:0xe3ab80, shirt:0x3f86b4, sleeve:0x356f96, short:0x27455a, hair:0x2a1f16,
-                  shoe:0xf2efe6, sole:0xdcd7c9, strap:0x3f86b4, lace:0xcfc6b4, cap:0xf4705a, trim:0xf6ecd9,
-                  pack:0x3f6b52, packD:0x2d5240, scale:1.0 }),
-  alya: makeKid({ skin:0xf0c49c, shirt:0xf4705a, sleeve:0xe06552, short:0x3ad0c4, hair:0x4a2f1e,
-                  shoe:0xfbf5e8, sole:0xe6ddc9, strap:0xf4705a, lace:0xe9c47f, band:0xefb455, trim:0xffe3b0,
-                  pack:0xe0785f, packD:0xb95844, scale:0.965 }),
+  ali:  PROP.kid.kidA ? makeMini(PROP.kid.kidA, ALI_CFG)  : makeKid(ALI_CFG),
+  alya: PROP.kid.kidB ? makeMini(PROP.kid.kidB, ALYA_CFG) : makeKid(ALYA_CFG),
 };
 KIDS.ali.name = 'Ali'; KIDS.alya.name = 'Alya';
 scene.add(KIDS.ali, KIDS.alya);
