@@ -1097,7 +1097,12 @@ function rampTex(stops){
 /* soldan sağa: ışığa tamamen sırtını dönen yüz → tam aydınlık yüz */
 const RAMP      = rampTex([0.06,0.06,0.08,0.13, 0.54,0.74,0.90,1.0]);           /* gövdeler, props */
 const RAMP_SOFT = rampTex([0.14,0.15,0.18,0.24, 0.60,0.74,0.85,0.93,0.98,1.0]); /* arazi, yol */
-const RAMP_HARD = rampTex([0.05,0.05,0.05,0.08, 0.72,0.72,1.0,1.0]);            /* karakterler, iki bant */
+const RAMP_HARD = rampTex([0.05,0.05,0.05,0.08, 0.72,0.72,1.0,1.0]);            /* sert iki bant — artık kullanılmıyor */
+/* Karakterlerde iki bantlı sert geçiş, yuvarlak bir kolun ortasından jiletle
+   çizilmiş gibi duruyor ve ten boyalı tahtaya benziyor. Ten ve kumaş için
+   aydınlık tarafta dört kademeli, geçişi yumuşak ayrı rampalar var.       */
+const RAMP_SKIN  = rampTex([0.07,0.08,0.10,0.16, 0.44,0.60,0.76,0.88,0.96,1.0]);
+const RAMP_CLOTH = rampTex([0.06,0.07,0.09,0.15, 0.48,0.66,0.82,0.93,1.0,1.0]);
 const RIM_COLOR = new THREE.Color(0xcfe9ff);
 /* MeshToonMaterial'da karşılığı olmayan PBR alanları sessizce düşürülür */
 const PBR_ONLY = ['roughness','metalness','envMapIntensity','sheen','sheenColor','sheenRoughness',
@@ -1409,6 +1414,25 @@ const BG = 1.8;
 const BGW = Math.ceil(WORLD_W/BG), BGH = Math.ceil(WORLD_H/BG);
 const blockRoad = new Uint8Array(BGW*BGH);
 const blockBld  = new Uint8Array(BGW*BGH);
+/* Yol kaplaması araziden birkaç santim yüksekte duruyor (parke 5,5 cm, eğimli
+   yerlerde kesitin iki kenarından yükseği alındığı için biraz daha fazla).
+   Karakterin kotu düz arazi yüksekliğinden geliyordu, bu yüzden yolda
+   yürürken ayaklar asfaltın altında kalıyordu. Yol yüzeyinin kotu artık
+   ayrı bir ızgarada tutuluyor ve zemin bu ikisinin yükseği oluyor.        */
+const roadY = new Float32Array(BGW*BGH).fill(-1e9);
+function stampY(x, z, r, y){
+  const i0 = Math.max(0, Math.floor((x-r-MINX)/BG)), i1 = Math.min(BGW-1, Math.ceil((x+r-MINX)/BG));
+  const j0 = Math.max(0, Math.floor((z-r-MINZ)/BG)), j1 = Math.min(BGH-1, Math.ceil((z+r-MINZ)/BG));
+  for(let j = j0; j <= j1; j++) for(let i = i0; i <= i1; i++){
+    const k = j*BGW+i; if(y > roadY[k]) roadY[k] = y;
+  }
+}
+const roadLevel = (x, z) => {
+  const i = Math.floor((x-MINX)/BG), j = Math.floor((z-MINZ)/BG);
+  return i < 0 || j < 0 || i >= BGW || j >= BGH ? -1e9 : roadY[j*BGW+i];
+};
+/* karakterlerin bastığı kot: arazi ya da üstündeki yol kaplaması */
+const groundAt = (x, z) => Math.max(terrainH(x, z), roadLevel(x, z));
 function stamp(buf, x, z, r){
   const i0 = Math.max(0, Math.floor((x-r-MINX)/BG)), i1 = Math.min(BGW-1, Math.ceil((x+r-MINX)/BG));
   const j0 = Math.max(0, Math.floor((z-r-MINZ)/BG)), j1 = Math.min(BGH-1, Math.ceil((z+r-MINZ)/BG));
@@ -1519,6 +1543,14 @@ for(const r of W.roads){
       const x = raw[i][0] + (raw[i+1][0]-raw[i][0])*k/steps;
       const z = raw[i][1] + (raw[i+1][1]-raw[i][1])*k/steps;
       stamp(blockRoad, x, z, hw + 1.6);
+      /* kaplamanın kotu: kesitin iki kenarından yükseği + parke kalınlığı */
+      {
+        let tx = raw[i+1][0]-raw[i][0], tz = raw[i+1][1]-raw[i][1];
+        const L = Math.hypot(tx, tz) || 1;
+        const nx = -tz/L, nz = tx/L;
+        const y = Math.max(terrainH(x - nx*hw, z - nz*hw), terrainH(x + nx*hw, z + nz*hw)) + 0.055;
+        stampY(x, z, hw*0.92, y);
+      }
     }
     if(wm >= 6){
       acc += seg;
@@ -2764,8 +2796,8 @@ function dropLoot(id, x, z){
    Her parça adlandırılmış gruplarda durur ki animasyon katmanı
    kalça → omurga → göğüs → boyun zincirini ayrı ayrı çevirebilsin.      */
 step(.93, 'Ali ve Alya hazırlanıyor…');
-const mkMat = (c, r) => toon({ color:c, ramp:RAMP_HARD, rim:0.3 });
-const skinMat = c => toon({ color:c, ramp:RAMP_HARD, rim:0.26 });
+const mkMat = (c, r) => toon({ color:c, ramp:RAMP_CLOTH, rim:0.26 });
+const skinMat = c => toon({ color:c, ramp:RAMP_SKIN, rim:0.2 });
 const hairMat = c => toon({ color:c, roughness:0.52, sheen:0.7,
                                                       sheenColor:new THREE.Color(0xd8c7a8), sheenRoughness:0.6 });
 const EYE_W = toon({ color:0xf7f3ea, roughness:0.28 });
@@ -2859,11 +2891,14 @@ function limbGeo(rTop, rMid, rBot, lenUp, lenLo){
   const capT = rTop*0.9, capB = rBot*0.9;
   const sm = x => x*x*(3 - 2*x);
   /* yarıçap: uçlarda küre kapak, arada omuz → eklem → bilek geçişi */
+  /* eklemin hemen altında hafif bir dolgunluk: baldır ve ön kol kası */
+  const bump = t => 1 + 0.16*Math.exp(-Math.pow((t - (lenUp + lenLo*0.3))/(lenLo*0.34), 2));
   const rAt = t => {
     if(t < capT){ const a = 1 - t/capT; return rTop*Math.sqrt(Math.max(0, 1 - a*a)); }
     if(t > L - capB){ const a = (t - (L - capB))/capB; return rBot*Math.sqrt(Math.max(0, 1 - a*a)); }
     const span = L - capT - capB, u = (t - capT)/span, jp = (lenUp - capT)/span;
-    return u < jp ? rTop + (rMid - rTop)*sm(u/jp) : rMid + (rBot - rMid)*sm((u - jp)/(1 - jp));
+    const base = u < jp ? rTop + (rMid - rTop)*sm(u/jp) : rMid + (rBot - rMid)*sm((u - jp)/(1 - jp));
+    return base*bump(t);
   };
   /* eklemin iki yanında bu kadarlık bir şeritte ağırlık paylaşılıyor */
   const band = Math.min(0.055, lenUp*0.38, lenLo*0.38);
@@ -2935,8 +2970,12 @@ function makeKid(cfg){
   skull.scale.set(1, 1.07, 0.98); skull.position.y = 0.018; head.add(skull);
   const jaw = new THREE.Mesh(new THREE.SphereGeometry(R*0.74, 18, 13), skin);
   jaw.scale.set(1.02, 0.8, 1.08); jaw.position.set(0, -R*0.4, -R*0.1); head.add(jaw);
-  const nose = new THREE.Mesh(new THREE.SphereGeometry(R*0.19, 10, 8), skin);
-  nose.scale.set(0.92, 0.88, 1.4); nose.position.set(0, -R*0.1, -R*0.94); head.add(nose);
+  /* Burun z ekseninde 1,4 kat uzatılıp kafa yüzeyinin 2 cm ötesine
+     taşıyordu: profilden bakınca sivri bir gaga çıkıyor, karakter
+     Pinokyo'ya benziyordu. Artık yüzeyden ancak yarım santim taşan
+     yuvarlak bir düğme.                                              */
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(R*0.17, 12, 9), skin);
+  nose.scale.set(1.0, 0.82, 0.92); nose.position.set(0, -R*0.12, -R*0.88); head.add(nose);
   const lids = [];
   for(const s of [-1, 1]){
     const e = new THREE.Group(); e.position.set(s*R*0.38, R*0.13, -R*0.78); head.add(e);
@@ -2949,8 +2988,8 @@ function makeKid(cfg){
     const lid = new THREE.Mesh(new THREE.SphereGeometry(R*0.255, 14, 8, 0, 6.283, 0, 1.3), skin);
     lid.scale.set(1, 0.92, 0.56); lid.position.y = R*0.1; lid.rotation.x = 1.35; e.add(lid);
     lids.push(lid);
-    const br = new THREE.Mesh(new THREE.CapsuleGeometry(R*0.035, R*0.26, 3, 6), hair);
-    br.position.set(s*R*0.4, R*0.56, -R*0.84); br.rotation.set(0, 0, Math.PI/2 + s*0.16); head.add(br);
+    const br = new THREE.Mesh(new THREE.CapsuleGeometry(R*0.028, R*0.24, 3, 6), hair);
+    br.position.set(s*R*0.4, R*0.52, -R*0.86); br.rotation.set(0, 0, Math.PI/2 + s*0.14); head.add(br);
     const ear = new THREE.Mesh(new THREE.SphereGeometry(R*0.27, 12, 9), skin);
     ear.scale.set(0.38, 1, 0.72); ear.position.set(s*R*0.95, -R*0.04, R*0.03); head.add(ear);
     const cheek = new THREE.Mesh(new THREE.SphereGeometry(R*0.26, 10, 8), mkMat(0xdd9170, 0.95));
@@ -3154,18 +3193,22 @@ function animKid(k, s, dt){
     u.head.rotation.y = lp(u.head.rotation.y, Math.sin(u.sway*0.33)*0.24, dt*3);
     u.head.rotation.x = lp(u.head.rotation.x, 0.02, dt*5);
     const idle = Math.sin(u.sway*1.5)*0.025;
-    u.legL.g.rotation.x = lp(u.legL.g.rotation.x, 0.03, dt*7);
-    u.legR.g.rotation.x = lp(u.legR.g.rotation.x, -0.05, dt*7);
-    u.legL.lo.rotation.x = lp(u.legL.lo.rotation.x, -0.06, dt*7);
-    u.legR.lo.rotation.x = lp(u.legR.lo.rotation.x, -0.1, dt*7);
-    u.legL.foot.rotation.x = lp(u.legL.foot.rotation.x, 0.02, dt*7);
-    u.legR.foot.rotation.x = lp(u.legR.foot.rotation.x, 0.03, dt*7);
-    u.armL.g.rotation.x = lp(u.armL.g.rotation.x, -0.03 + idle, dt*6);
-    u.armR.g.rotation.x = lp(u.armR.g.rotation.x, -0.03 - idle, dt*6);
-    u.armL.g.rotation.z = lp(u.armL.g.rotation.z, -0.1, dt*6);
-    u.armR.g.rotation.z = lp(u.armR.g.rotation.z, 0.1, dt*6);
-    u.armL.lo.rotation.x = lp(u.armL.lo.rotation.x, 0.2, dt*6);
-    u.armR.lo.rotation.x = lp(u.armR.lo.rotation.x, 0.2, dt*6);
+    /* dimdik duran uzuvlar oyuncak bebek gibi görünüyor: dizler ve dirsekler
+       boşta bile hafif bükük, kollar gövdeden biraz açık duruyor           */
+    u.legL.g.rotation.x = lp(u.legL.g.rotation.x, 0.05, dt*7);
+    u.legR.g.rotation.x = lp(u.legR.g.rotation.x, -0.07, dt*7);
+    u.legL.lo.rotation.x = lp(u.legL.lo.rotation.x, -0.14, dt*7);
+    u.legR.lo.rotation.x = lp(u.legR.lo.rotation.x, -0.19, dt*7);
+    u.legL.foot.rotation.x = lp(u.legL.foot.rotation.x, 0.06, dt*7);
+    u.legR.foot.rotation.x = lp(u.legR.foot.rotation.x, 0.08, dt*7);
+    u.armL.g.rotation.x = lp(u.armL.g.rotation.x, -0.05 + idle, dt*6);
+    u.armR.g.rotation.x = lp(u.armR.g.rotation.x, -0.05 - idle, dt*6);
+    u.armL.g.rotation.z = lp(u.armL.g.rotation.z, -0.19, dt*6);
+    u.armR.g.rotation.z = lp(u.armR.g.rotation.z, 0.19, dt*6);
+    u.armL.lo.rotation.x = lp(u.armL.lo.rotation.x, 0.34, dt*6);
+    u.armR.lo.rotation.x = lp(u.armR.lo.rotation.x, 0.34, dt*6);
+    u.armL.lo.rotation.y = lp(u.armL.lo.rotation.y || 0, 0.12, dt*6);
+    u.armR.lo.rotation.y = lp(u.armR.lo.rotation.y || 0, -0.12, dt*6);
   } else {
     /* yürüyüş → koşu */
     const sw = 0.3 + run*0.26;                        /* kalça açıklığı */
@@ -3201,8 +3244,8 @@ function animKid(k, s, dt){
     const elbow = 0.42 + run*1.1;
     u.armL.g.rotation.x = -sL*aw - run*0.18;
     u.armR.g.rotation.x = -sR*aw - run*0.18;
-    u.armL.g.rotation.z = -0.1 - run*0.1;
-    u.armR.g.rotation.z = 0.1 + run*0.1;
+    u.armL.g.rotation.z = -0.16 - run*0.1;
+    u.armR.g.rotation.z = 0.16 + run*0.1;
     u.armL.lo.rotation.x = elbow + pos(-sL)*(0.2 + run*0.3);
     u.armR.lo.rotation.x = elbow + pos(-sR)*(0.2 + run*0.3);
   }
@@ -4896,7 +4939,7 @@ function updatePlayer(dt, t){
   if(L > 1){ ix /= L; iz /= L; }
   const amt = GS.stun > 0 ? 0 : Math.min(1, L);
 
-  const ground = terrainH(P.x, P.z);
+  const ground = groundAt(P.x, P.z);
   const wet = ground < -0.85;                     // 85 cm'den derinse yüzülür, daha sığı yürünür
   if(!wet) P.swim = false;
   else if(P.y < 0.3) P.swim = true;
@@ -4973,7 +5016,7 @@ function updatePlayer(dt, t){
     MATE.face += diff*Math.min(1, dt*9);
   } else MATE.spd = Math.max(0, MATE.spd - dt*2);
   MATE.swim = terrainH(MATE.x, MATE.z) < -0.15;
-  MATE.y = MATE.swim ? Math.max(terrainH(MATE.x, MATE.z) + 0.45, -0.42) : terrainH(MATE.x, MATE.z);
+  MATE.y = MATE.swim ? Math.max(terrainH(MATE.x, MATE.z) + 0.45, -0.42) : groundAt(MATE.x, MATE.z);
   other.position.set(MATE.x, MATE.y, MATE.z);
   other.rotation.y = MATE.face;
   animKid(other, { spd:MATE.spd, swim:MATE.swim, dive:false, air:false, stun:0, torch:false }, dt);
@@ -5052,7 +5095,7 @@ function updateJackals(dt, t){
         j.state = 'wander'; j.t = 0;
       }
     }
-    j.y = Math.max(0.05, terrainH(j.x, j.z));
+    j.y = Math.max(0.05, groundAt(j.x, j.z));
     j.o.position.set(j.x, j.y, j.z);
     j.o.rotation.y = j.face;
     animJackal(j, sp/5.6, dt, t);
@@ -5118,7 +5161,7 @@ function updateNPC(dt, t){
       if(td > 1.2){ sp = 2.6; slide(n, tdx/td*sp*dt, tdz/td*sp*dt); n.face = Math.atan2(-tdx/td, -tdz/td); }
       else { n.state = 'home'; n.t = 0; }
     }
-    n.y = Math.max(0, terrainH(n.x, n.z));
+    n.y = Math.max(0, groundAt(n.x, n.z));
     n.o.position.set(n.x, n.y, n.z);
     n.o.rotation.y = n.face;
     n.o.visible = true;
@@ -5552,7 +5595,7 @@ const PERK = {
 let started = false;
 
 HELD.ali.knife.visible = false; HELD.alya.knife.visible = false;
-P.y = terrainH(P.x, P.z);
+P.y = groundAt(P.x, P.z);
 MATE.y = terrainH(MATE.x, MATE.z);
 compassTargets();
 paintQuests(); paintObjective(); setTab(true); refreshHUD(); setTime('noon'); setMode('play');
@@ -5598,6 +5641,7 @@ window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS,
                        setTime, setMode, flyTo, toast, interact, throwStone, toggleTorch, switchKid,
                        scene, camera, renderer, THREE, setFx, fx:() => fxOn, cam:() => ({ camYaw, camPitch, camDist }),
                        post:() => ({ composer, stylize, bloom, applyGrade, toonMats, RAMP, RAMP_SOFT, RAMP_HARD, hemi, sun }),
+                       ground:{ terrainH, roadLevel, groundAt, blocked, blockRoad },
                        setCam:(y, p2, d) => { camYaw = y; if(p2 !== undefined) camPitch = p2; if(d !== undefined) camDist = d; } };
 /* çevrimdışı oynanabilsin diye servis çalışanı — sadece kendi alan adında */
 if('serviceWorker' in navigator && location.protocol === 'https:'){
