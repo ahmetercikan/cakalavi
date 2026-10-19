@@ -11,14 +11,7 @@ tam ekran bir uygulama gibi açılır ve çevrimdışı çalışır.
 
 ## Oynanış
 
-- **W A S D / ok tuşları** yürü · **Shift** koş · **Boşluk** zıpla
-- **C** suda dal (nefes halkası boşalmadan yüzeye çık)
-- **E** büfe, hurdacı, muhtar panosu, arkadaşla konuş, kıyıdan çakıl topla
-- **F** el feneri · **R** veya sol tık taş at
-- **I** çanta · **T** Ali ↔ Alya · **M** harita modu · **H** yardım · **P** parıltı efekti
-- Fareyle sürükleyerek bak, çift tıkla serbest bakış
-
-### Telefon / tablet
+Oyun yalnızca dokunmatik oynanır; arayüzde klavye tuşu geçmez.
 
 - **Sol yarı:** parmağını bas-kaydır, yön çubuğu parmağının altında belirir; kenara dayanınca koşar
 - **Sağ yarı:** sürükle → kamerayı çevir, tek dokunuş → taş at, iki parmak → yakınlaş
@@ -26,6 +19,8 @@ tam ekran bir uygulama gibi açılır ve çevrimdışı çalışır.
 - Dikey ve yatay yerleşim ayrı ayrı tasarlandı; çentik/ev düğmesi güvenli alanları gözetilir
 - Titreşimli geri bildirim, ekranı uyanık tutma, tam ekran düğmesi
 - iPhone'da **Paylaş → Ana Ekrana Ekle**, Android'de **Uygulamayı yükle** ile tam ekran kurulur
+- Masaüstü tarayıcıda da aynı dokunmatik yerleşim açılır (fareyle sürüklenir); eski
+  masaüstü yerleşimi yalnızca test için `?desktop=1` ile görülebilir
 
 ## İçerik
 
@@ -47,4 +42,4 @@ GitHub Pages'e yayınlanır (`.github/workflows/pages.yml`).
 (PWA). Sahne, cihazın çekirdek sayısı, belleği ve ekran boyutuna göre dört kalite
 kademesinden birinde kurulur: gölge çözünürlüğü, su ağı, ganimet yoğunluğu, serpinti,
 görüş mesafesi ve parıltı katmanı buna bağlı. Kare hızı düşerse kademe oyun sırasında
-kendiliğinden iner. Test için `?tier=0..3` ve `?touch=1` parametreleri vardır.
+kendiliğinden iner. Test için `?tier=0..3` ve `?desktop=1` parametreleri vardır.

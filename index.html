@@ -268,15 +268,11 @@ button:focus-visible,[role="button"]:focus-visible{outline:2px solid var(--teal)
   transition:color .16s, background .16s, border-color .16s, transform .14s;
 }
 .sl .ico{width:21px; height:21px}
-.sl kbd{
-  position:absolute; top:3px; right:5px; font-family:var(--mono); font-size:8.5px;
-  color:var(--bone-3); letter-spacing:.04em;
-}
 .sl .n{font-family:var(--mono); font-size:9.5px; color:var(--bone-3)}
 .sl:hover{background:rgba(246,236,217,.09); color:var(--bone); transform:translateY(-2px)}
 .sl.lock{opacity:.34}
 .sl.on{color:var(--teal); background:rgba(58,208,196,.16); border-color:rgba(58,208,196,.42); box-shadow:0 0 18px -6px rgba(58,208,196,.8)}
-.sl.on .n,.sl.on kbd{color:var(--teal)}
+.sl.on .n{color:var(--teal)}
 .sl.flash{animation:slflash .32s ease}
 @keyframes slflash{0%{background:rgba(58,208,196,.5)}100%{background:rgba(246,236,217,.045)}}
 .sl .pips{display:flex; gap:2px; margin-top:1px}
@@ -296,6 +292,7 @@ button:focus-visible,[role="button"]:focus-visible{outline:2px solid var(--teal)
   width:26px; height:26px; border-radius:8px; display:grid; place-items:center; flex:0 0 auto;
   background:var(--teal); color:#042028; font-family:var(--mono); font-size:12px; font-weight:600;
 }
+#prompt .key svg{width:15px; height:15px}
 #prompt small{display:block; font-size:10.5px; color:var(--bone-3); font-family:var(--mono)}
 
 /* ---- etkin görev ve ödül afişi ---- */
@@ -487,9 +484,7 @@ button:focus-visible,[role="button"]:focus-visible{outline:2px solid var(--teal)
 /* ---- dokunmatik: telefon ve tablet, dikey ve yatay ---- */
 #touch{display:none; position:fixed; inset:0; z-index:19; pointer-events:none}
 body.touch #touch{display:block}
-body.touch #radar,body.touch #journal,body.touch .legend,body.touch .belt{display:none}
-.touch-legend{display:none}
-body.touch .touch-legend{display:flex}
+body.touch #radar,body.touch #journal,body.touch .belt{display:none}
 /* araç rayı telefonda iki sütuna sarar, kimlik kartının altına inmez */
 body.touch .tool-rail{flex-direction:row; flex-wrap:wrap; width:94px; justify-content:center; gap:6px; padding:6px}
 body.touch .tool-rail .grp{display:contents}
@@ -882,19 +877,12 @@ body.touch #tbtns{display:grid}
     <p class="lede">Ali ve Alya bütün yazı koyda geçiriyor: kabuk, mineralli taş, bir de kimsenin istemediği delik otel terliği — hepsi ganimet. Akşam büfede satılır, gece el feneriyle çakal avına çıkılır. Kim oynuyor?</p>
     <div class="picks" id="picks"></div>
     <button class="btn go" id="start">Başla</button>
-    <p class="legend touch-legend">
+    <p class="legend">
       <span><kbd>Sol yarı</kbd><b>yürü (parmağını kaydır)</b></span>
       <span><kbd>Sağ yarı</kbd><b>bak · tek dokunuş taş atar</b></span>
       <span><kbd>İki parmak</kbd><b>yakınlaş</b></span>
       <span><kbd>Sağ alt</kbd><b>dal · zıpla · fener · çanta</b></span>
       <span><kbd>Büyük tuş</kbd><b>etkileşim</b></span>
-    </p>
-    <p class="legend">
-      <span><kbd>W A S D</kbd><b>yürü</b></span><span><kbd>Shift</kbd><b>koş</b></span>
-      <span><kbd>Boşluk</kbd><b>zıpla</b></span><span><kbd>C</kbd><b>dal</b></span>
-      <span><kbd>E</kbd><b>etkileşim</b></span><span><kbd>F</kbd><b>fener</b></span>
-      <span><kbd>R</kbd><b>taş at</b></span><span><kbd>I</kbd><b>çanta</b></span>
-      <span><kbd>T</kbd><b>Ali ↔ Alya</b></span><span><kbd>M</kbd><b>harita</b></span>
     </p>
   </div>
 </div>
@@ -969,8 +957,11 @@ const pick = arr => arr[Math.floor(rand()*arr.length)];
    parıltı katmanı ve piksel oranı kademeye bağlı. Kare hızı düşerse
    kademe oyun sırasında kendiliğinden iniyor.                              */
 const UA = navigator.userAgent;
-const QS = new URLSearchParams(location.search);          /* ?touch=1 · ?tier=0..3 — test için */
-const COARSE = QS.has('touch') || matchMedia('(pointer:coarse)').matches || navigator.maxTouchPoints > 1;
+const QS = new URLSearchParams(location.search);          /* ?desktop=1 · ?tier=0..3 — test için */
+/* Oyun mobil: dokunmatik yerleşim her cihazda açıktır, ?desktop=1 yalnızca test içindir.
+   Kalite kademesi ve tam ekran ise gerçek donanıma (MOBILE) bakar.                      */
+const TOUCHUI = !QS.has('desktop');
+const COARSE = matchMedia('(pointer:coarse)').matches || navigator.maxTouchPoints > 1;
 const MOBILE = COARSE || /Mobi|Android|iPhone|iPad|iPod/i.test(UA);
 const IOS = /iPad|iPhone|iPod/.test(UA) || (/Mac/.test(UA) && navigator.maxTouchPoints > 1);
 const CORES = navigator.hardwareConcurrency || 4;
@@ -988,14 +979,13 @@ let tier = !MOBILE ? 3
          : 0;
 if(QS.has('tier')) tier = Math.max(0, Math.min(3, +QS.get('tier')|0));
 const Q = QUAL[tier];
-const isPhone = MOBILE;
 
 const stage = document.getElementById('stage');
 const renderer = new THREE.WebGLRenderer({
   antialias: tier >= 2, powerPreference:'high-performance', alpha:false, stencil:false,
 });
 renderer.setPixelRatio(Math.min(devicePixelRatio, Q.dpr));
-if(MOBILE) document.body.classList.add('touch');
+if(TOUCHUI) document.body.classList.add('touch');
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = Q.shadow > 0;
 renderer.shadowMap.type = tier >= 2 ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
@@ -1008,7 +998,7 @@ const scene = new THREE.Scene();
 let baseFov = 50;
 function fitFov(){
   const aspect = innerWidth/Math.max(1, innerHeight);
-  const hfov = (MOBILE ? 78 : 74)*Math.PI/180;
+  const hfov = (TOUCHUI ? 78 : 74)*Math.PI/180;
   const v = 2*Math.atan(Math.tan(hfov/2)/Math.max(0.35, aspect))*180/Math.PI;
   baseFov = Math.max(44, Math.min(88, v));
   return baseFov;
@@ -3367,7 +3357,7 @@ const SPOTS = [];
   scene.add(g);
   stamp(blockBld, bx, bz, 2.6);
   SPOTS.push({ id:'bufe', kind:'shop', name:'Mistral Büfe', x:bx, z:bz + 3.2, r:4.2,
-               hint:'E — ganimet sat / malzeme al' });
+               hint:'ganimet sat / malzeme al' });
 
   /* Hurdacı kamyoneti — çöp ganimete üç kat verir */
   const [tx, tz] = freeSpot(700, 628, 50);
@@ -3391,7 +3381,7 @@ const SPOTS = [];
   t.traverse(o => { if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
   scene.add(t);
   SPOTS.push({ id:'hurdaci', kind:'junk', name:'Hurdacı Kamyoneti', x:tx, z:tz + 2.6, r:4.0,
-               hint:'E — çöp ganimeti üç katına sat' });
+               hint:'çöp ganimeti üç katına sat' });
 
   /* Muhtar panosu — çakal ihbarları */
   const [px_, pz_] = freeSpot(660, 646, 40);
@@ -3411,7 +3401,7 @@ const SPOTS = [];
   b2.traverse(o => { if(o.isMesh) o.castShadow = true; });
   scene.add(b2);
   SPOTS.push({ id:'pano', kind:'board', name:'Muhtarlık Panosu', x:px_, z:pz_ + 1.6, r:3.4,
-               hint:'E — görevleri oku' });
+               hint:'görevleri oku' });
 })();
 for(const s of SPOTS){
   const el = document.createElement('div');
@@ -3565,15 +3555,15 @@ function rankInfo(){
 
 /* ---- kuşak (hotbar) ---- */
 const BELT = [
-  { k:'fener',  key:'F', n:'Fener', icon:'torch', gear:'fener', act:() => toggleTorch() },
-  { k:'caki',   key:'·', n:'Çakı',  icon:'knife', gear:'caki',  act:() => toast(GS.gear.caki ? 'Çakı elinde — çakallar yaklaşamaz' : 'Çakı yok, büfeden ₺90') },
-  { k:'tas',    key:'R', n:'Taş',   icon:'rock',  act:() => throwStone() },
-  { k:'dal',    key:'C', n:'Dal',   icon:'dive',  act:() => toast('Suda C tuşu ile dalınır') },
-  { k:'canta',  key:'I', n:'Çanta', icon:'bag',   act:() => (UI.modal.hidden ? openModal('bag') : closeModal()) },
-  { k:'degis',  key:'T', n:'Değiş', icon:'swap',  act:() => switchKid() },
+  { k:'fener',  n:'Fener', icon:'torch', gear:'fener', act:() => toggleTorch() },
+  { k:'caki',   n:'Çakı',  icon:'knife', gear:'caki',  act:() => toast(GS.gear.caki ? 'Çakı elinde — çakallar yaklaşamaz' : 'Çakı yok, büfeden ₺90') },
+  { k:'tas',    n:'Taş',   icon:'rock',  act:() => throwStone() },
+  { k:'dal',    n:'Dal',   icon:'dive',  act:() => toast('Dalmak için önce suya girmen gerek') },
+  { k:'canta',  n:'Çanta', icon:'bag',   act:() => (UI.modal.hidden ? openModal('bag') : closeModal()) },
+  { k:'degis',  n:'Değiş', icon:'swap',  act:() => switchKid() },
 ];
 UI.belt.innerHTML = BELT.map(b =>
-  `<button class="sl" data-slot="${b.k}"><kbd>${b.key}</kbd>${ic(b.icon)}<span class="n">${b.n}</span></button>`).join('');
+  `<button class="sl" data-slot="${b.k}">${ic(b.icon)}<span class="n">${b.n}</span></button>`).join('');
 UI.belt.addEventListener('click', e => {
   const b = e.target.closest('[data-slot]');
   if(!b) return;
@@ -3677,7 +3667,7 @@ const MODAL_META = {
   shop:  { t:'Mistral Büfe',    s:'kabuk, taş, mineral — tam fiyat', e:'shop' },
   junk:  { t:'Hurdacı Kamyoneti', s:'çöpe üç kat, kabuğa yarım', e:'truck' },
   board: { t:'Muhtarlık Panosu', s:'görevler ve çakal ödülü', e:'board' },
-  help:  { t:'Nasıl oynanır',   s:'tuşlar ve ganimet düzeni', e:'help' },
+  help:  { t:'Nasıl oynanır',   s:'kontroller ve ganimet düzeni', e:'help' },
 };
 let modalKind = null;
 function openModal(kind){
@@ -3750,13 +3740,13 @@ function boardHTML(){
 function helpHTML(){
   const key = (k, t) => `<div class="srow">${ic('hand')}<span class="tx"><b>${k}</b><small>${t}</small></span></div>`;
   return `<p class="note">Üçüncü şahıs oynanır: Ali ya da Alya’yı yürütürsün, diğeri peşinden gelir.</p>
-    <div class="sect"><h4>Tuşlar</h4><div class="ln"></div></div>
-    ${key('W A S D / ok tuşları', 'yürü — fareyle sürükleyerek etrafına bak, çift tık serbest bakış')}
-    ${key('Shift', 'koş (dayanıklılık halkası sağ altta)')}
-    ${key('Boşluk · C', 'zıpla · suda dal (nefes halkası dolana kadar)')}
-    ${key('E', 'büfe, hurdacı, pano, arkadaşla konuş, kıyıdan çakıl topla')}
-    ${key('F · R / sol tık', 'el feneri · taş at')}
-    ${key('I · T · M · H', 'çanta · Ali↔Alya · harita modu · bu pencere')}
+    <div class="sect"><h4>Kontroller</h4><div class="ln"></div></div>
+    ${key('Sol yarı', 'parmağını bastığın yerde yön çubuğu çıkar — kenara dayanırsan koşarsın')}
+    ${key('Sağ yarı', 'kamerayı çevirir · tek dokunuş taş atar · iki parmak yakınlaştırır')}
+    ${key('Etkileş — büyük tuş', 'büfe, hurdacı, pano, arkadaşla konuş, kıyıdan çakıl topla')}
+    ${key('Dal · Zıpla', 'suda dal (nefes halkası dolana kadar) · zıpla')}
+    ${key('Fener · Taş', 'el fenerini aç-kapa · elindeki taşı at')}
+    ${key('Çanta · Değiş', 'ganimet çantası · Ali ↔ Alya')}
     <div class="sect" style="margin-top:14px"><h4>Ganimet</h4><div class="ln"></div></div>
     <div class="grid">${Object.keys(ITEMS).map(k =>
       `<div class="cell k-${k}${ITEMS[k].junk ? ' junk' : ''}">${ic(ICON[k])}<b>${ITEMS[k].n}</b>
@@ -5046,11 +5036,11 @@ function animate(){
   const wantPrompt = mode === 'play' && UI.modal.hidden && started &&
                      (nearSpot || (nearShore && GS.stones < GS.maxStones));
   if(wantPrompt){
-    const txt = nearSpot ? [nearSpot.name, nearSpot.hint.replace('E — ', '')]
+    const txt = nearSpot ? [nearSpot.name, nearSpot.hint]
                          : ['Çakıl taşı topla', GS.stones + '/' + GS.maxStones + ' cepte'];
     if(UI.prompt.dataset.k !== txt[0]){
       UI.prompt.dataset.k = txt[0];
-      UI.prompt.innerHTML = `<span class="key">E</span><span><b>${txt[0]}</b><small>${txt[1]}</small></span>`;
+      UI.prompt.innerHTML = `<span class="key">${ic('hand')}</span><span><b>${txt[0]}</b><small>${txt[1]}</small></span>`;
     }
     UI.prompt.hidden = false;
   } else { UI.prompt.hidden = true; UI.prompt.dataset.k = ''; }
