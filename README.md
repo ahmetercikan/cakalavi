@@ -48,8 +48,14 @@ kendiliğinden iner. Test için `?tier=0..3` ve `?desktop=1` parametreleri vard�
 
 ## Varlıklar
 
-`assets/` altındaki kaya, çakıl ve çalı modelleri Quaternius'un **Stylized Nature
+`assets/` altındaki kaya, çakıl, çalı ve ağaç modelleri Quaternius'un **Stylized Nature
 MegaKit** paketinden (CC0, https://quaternius.com) alınmıştır. Dokuları
-çıkarılmış, yerine oyunun kendi düz toon renkleri uygulanmıştır; toplam ~180 KB.
+çıkarılmış, yerine oyunun kendi düz toon renkleri uygulanmıştır; toplam ~550 KB.
 Model dosyaları zorunlu değildir — yüklenemezlerse oyun prosedürel geometriyle
 çalışmaya devam eder.
+
+Ağaçlar iki ayrıntı kademesinde duruyor: yakındakiler hazır model, uzaktakiler
+eski prosedürel geometri. Sınırı mesafe değil üçgen bütçesi koyuyor — öbekler
+yakından uzağa sıralanıp bütçe bitene kadar modele geçiriliyor, böylece ağaç
+yoğunluğu ne olursa olsun maliyet sabit kalıyor (telefonda 26 bin, masaüstünde
+260 bin üçgen).

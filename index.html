@@ -930,7 +930,7 @@ try {
    modeller; oyun kendi düz toon renklerini uyguluyor, dosyalar bu yüzden
    küçük (toplam ~180 KB). Yüklenemezlerse oyun eski prosedürel geometriyle
    çalışmaya devam ediyor — model dosyaları zorunlu değil.                 */
-const PROP = { rock:[], pebble:[], bush:null };
+const PROP = { rock:[], pebble:[], bush:null, tree:{} };
 /* modeli tabanı sıfırda, yatayda ortalı ve bir metre boyunda hale getirir */
 function normProp(geo){
   const g = geo.clone();
@@ -950,11 +950,28 @@ try {
   const loader = new GLTFLoader();
   const want = [['rock','Rock_Medium_1'], ['rock','Rock_Medium_2'], ['rock','Rock_Medium_3'],
                 ['pebble','Pebble_Round_1'], ['pebble','Pebble_Round_2'], ['pebble','Pebble_Round_3'],
-                ['bush','Bush_Common']];
+                ['bush','Bush_Common'], ['pine','Pine_5'], ['olive','CommonTree_5']];
   const got = await Promise.all(want.map(([k, n]) =>
     loader.loadAsync('assets/' + n + '.glb').then(r => [k, r]).catch(() => [k, null])));
+  /* ağaçta gövde ve yaprak ayrı parçalar: ikisini düz birer renge boyayıp
+     tek geometriye katıyoruz, böylece tek çizimde örneklenebiliyor       */
+  const TREE_COL = { pine:[0x5f4a35, 0x3d6b3c], olive:[0x5e4a36, 0x6b8c4a] };
   for(const [k, r] of got){
     if(!r) continue;
+    if(TREE_COL[k]){
+      const parts = [], cols = [];
+      r.scene.traverse(o => {
+        if(!o.isMesh) return;
+        o.updateWorldMatrix(true, false);
+        const gg = o.geometry.clone(); gg.applyMatrix4(o.matrixWorld);
+        if(!gg.attributes.normal) gg.computeVertexNormals();
+        const nm = (o.material && o.material.name || '').toLowerCase();
+        const leafy = nm.includes('leaf') || nm.includes('leaves');
+        parts.push(gg); cols.push(new THREE.Color(TREE_COL[k][leafy ? 1 : 0]));
+      });
+      if(parts.length) PROP.tree[k] = mergeSimple(parts, cols);
+      continue;
+    }
     let geo = null;
     r.scene.traverse(o => { if(o.isMesh && !geo) geo = o.geometry; });
     if(!geo) continue;
@@ -1856,6 +1873,24 @@ const palmGeo = (() => {
 
 const treeMat = toon({ vertexColors:true, rim:0.34 });
 const CHUNK = 130;
+/* Ağaçlar iki ayrıntı kademesinde duruyor: yakındakiler hazır model (çam
+   1.646, yayvan 3.182 üçgen), uzaktakiler eski ucuz geometri. Öbek boyu
+   bu yüzden 68 m: kademe değişimi öbek öbek yapılıyor, yarıçap da buna
+   göre seçildi. Model yarıçapı cihaz kademesine bağlı.                   */
+const TCHUNK = 68;
+const TREE_LOD = PROP.tree.pine || PROP.tree.olive ? [30, 46, 64, 88][tier] : 0;
+/* modeli ucuz geometriyle aynı boya ve aynı tabana oturt */
+function fitTo(g, ref){
+  ref.computeBoundingBox(); g.computeBoundingBox();
+  const rb = ref.boundingBox, gb = g.boundingBox;
+  const sc = (rb.max.y - rb.min.y)/Math.max(0.001, gb.max.y - gb.min.y);
+  const c = new THREE.Vector3(); gb.getCenter(c);
+  g.translate(-c.x, -gb.min.y, -c.z);
+  g.scale(sc, sc, sc);
+  g.translate(0, rb.min.y, 0);
+  g.computeBoundingSphere();
+  return g;
+}
 const buckets = new Map();
 for(const t of W.trees){
   const x = px2x(t[0]), z = pz2z(t[1]), r = t[2];
@@ -1863,17 +1898,25 @@ for(const t of W.trees){
   const h = terrainH(x, z);
   let kind = r >= 3.4 ? 'pine' : 'olive';
   if(h < 4 && r >= 2.2 && r < 4 && rand() < 0.18) kind = 'palm';
-  const key = kind + '|' + Math.floor(x/CHUNK) + '|' + Math.floor(z/CHUNK);
+  const key = kind + '|' + Math.floor(x/TCHUNK) + '|' + Math.floor(z/TCHUNK);
   let arr = buckets.get(key);
   if(!arr){ arr = []; buckets.set(key, arr); }
   arr.push([x, h, z, r]);
 }
 const dummy = new THREE.Object3D();
 const GEOS = { pine:pineGeo, olive:oliveGeo, palm:palmGeo };
+const MODELGEO = {};
+if(TREE_LOD) for(const k of ['pine', 'olive'])
+  if(PROP.tree[k]) MODELGEO[k] = fitTo(PROP.tree[k], GEOS[k]);
+const treeLods = [];
 for(const [key, list] of buckets){
-  const geo = GEOS[key.split('|')[0]];
-  const im = new THREE.InstancedMesh(geo, treeMat, list.length);
+  const kind = key.split('|')[0];
+  const im = new THREE.InstancedMesh(GEOS[kind], treeMat, list.length);
   im.castShadow = im.receiveShadow = true;
+  const mg = MODELGEO[kind];
+  const lm = mg ? new THREE.InstancedMesh(mg, treeMat, list.length) : null;
+  if(lm){ lm.castShadow = lm.receiveShadow = true; lm.visible = false; }
+  let cx = 0, cz = 0;
   list.forEach((t, i) => {
     dummy.position.set(t[0], t[1] - 0.2, t[2]);
     dummy.rotation.set(0, rand()*Math.PI*2, 0);
@@ -1881,9 +1924,37 @@ for(const [key, list] of buckets){
     dummy.scale.set(sc, sc*(0.9 + rand()*0.3), sc);
     dummy.updateMatrix();
     im.setMatrixAt(i, dummy.matrix);
+    if(lm) lm.setMatrixAt(i, dummy.matrix);
+    cx += t[0]; cz += t[2];
   });
   im.computeBoundingSphere();
   scene.add(im);
+  if(lm){
+    lm.computeBoundingSphere();
+    scene.add(lm);
+    treeLods.push({ cx:cx/list.length, cz:cz/list.length, cheap:im, model:lm,
+                    tris:list.length*(mg.index.count/3), d:0 });
+  }
+}
+/* Oyuncu yürüdükçe en yakın öbekler modele, kalanlar ucuz geometriye döner.
+   Sınırı mesafe değil üçgen bütçesi koyuyor: öbekler yakından uzağa doğru
+   sıralanıp bütçe bitene kadar modele geçiriliyor, böylece ağaç yoğunluğu
+   ne olursa olsun maliyet sabit kalıyor.                                   */
+const TREE_BUDGET = [26000, 70000, 150000, 260000][tier];
+const TREE_MAXD2 = (TREE_LOD + TCHUNK)**2;
+function treeLodTick(px, pz){
+  /* zaten modele geçmiş öbeğe küçük bir avantaj: bütçe sınırında gidip gelme olmasın */
+  for(const L of treeLods){
+    const dx = L.cx - px, dz = L.cz - pz;
+    L.d = (dx*dx + dz*dz)*(L.model.visible ? 0.78 : 1);
+  }
+  treeLods.sort((a, b) => a.d - b.d);
+  let budget = TREE_BUDGET;
+  for(const L of treeLods){
+    const near = L.d < TREE_MAXD2 && budget >= L.tris;
+    if(near) budget -= L.tris;
+    if(near !== L.model.visible){ L.model.visible = near; L.cheap.visible = !near; }
+  }
 }
 
 /* begonviller */
@@ -5113,6 +5184,7 @@ function animate(){
   updateShots(dt);
   lootNear(dt, t);
   if(!scatterAt || (P.x - scatterAt[0])**2 + (P.z - scatterAt[1])**2 > 100) scatter(P.x, P.z);
+  if(TREE_LOD && (miniTick % 8) === 0) treeLodTick(P.x, P.z);
 
   /* ganimet geri gelir (dalgalar yeni kabuk bırakır) */
   if((lootTick++ % 45) === 0){
