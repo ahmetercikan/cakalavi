@@ -903,8 +903,8 @@ body.touch #tbtns{display:grid}
 
 <script type="importmap">
 {"imports":{
-  "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  "three":"https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/"
 }}
 </script>
 <script type="module">
@@ -988,7 +988,7 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, Q.dpr));
 if(TOUCHUI) document.body.classList.add('touch');
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = Q.shadow > 0;
-renderer.shadowMap.type = tier >= 2 ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;   /* r186'da PCFSoftShadowMap kaldırıldı */
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.02;
 stage.appendChild(renderer.domElement);
@@ -1020,6 +1020,63 @@ const hemi = new THREE.HemisphereLight(0xbfe4ff, 0x7a6f52, 1.1);
 scene.add(hemi);
 const fog = new THREE.FogExp2(0xbfdcea, 0.0013*Q.fogK);
 scene.fog = fog;
+
+/* ---------- stilize kaplama: kademeli ışık rampası + kenar ışığı ----------
+   Oyunun görsel dili çizgi film. Işık sürekli bir geçiş yerine birkaç banda
+   oturuyor (toon ramp), nesnenin silüetinde gökyüzü renginde ince bir kenar
+   ışığı kalıyor. PBR'den hem ucuz hem de eksik detayı affediyor: düz renk
+   yüzeyler mobilde bedava, çizgi film de zaten "eksiksiz" görünür.        */
+function rampTex(stops){
+  const n = stops.length, d = new Uint8Array(n*4);
+  for(let i = 0; i < n; i++){
+    const v = Math.round(Math.max(0, Math.min(1, stops[i]))*255);
+    d[i*4] = d[i*4+1] = d[i*4+2] = v; d[i*4+3] = 255;
+  }
+  const t = new THREE.DataTexture(d, n, 1, THREE.RGBAFormat);
+  t.minFilter = t.magFilter = THREE.NearestFilter;
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  t.generateMipmaps = false; t.needsUpdate = true;
+  return t;
+}
+/* soldan sağa: ışığa tamamen sırtını dönen yüz → tam aydınlık yüz */
+const RAMP      = rampTex([0.06,0.06,0.08,0.13, 0.54,0.74,0.90,1.0]);           /* gövdeler, props */
+const RAMP_SOFT = rampTex([0.14,0.15,0.18,0.24, 0.60,0.74,0.85,0.93,0.98,1.0]); /* arazi, yol */
+const RAMP_HARD = rampTex([0.05,0.05,0.05,0.08, 0.72,0.72,1.0,1.0]);            /* karakterler, iki bant */
+const RIM_COLOR = new THREE.Color(0xcfe9ff);
+/* MeshToonMaterial'da karşılığı olmayan PBR alanları sessizce düşürülür */
+const PBR_ONLY = ['roughness','metalness','envMapIntensity','sheen','sheenColor','sheenRoughness',
+                  'clearcoat','clearcoatRoughness','transmission','thickness','ior','attenuationColor',
+                  'attenuationDistance','specularIntensity','specularColor','iridescence','reflectivity',
+                  'shininess','specular','flatShading'];
+const toonMats = [];
+function toon(o){
+  const p = Object.assign({}, o || {});
+  const flat = !!p.flatShading;
+  for(const k of PBR_ONLY) delete p[k];
+  const rim = p.rim === undefined ? 0.22 : p.rim; delete p.rim;
+  const ramp = p.ramp || RAMP; delete p.ramp;
+  const m = new THREE.MeshToonMaterial(p);
+  m.gradientMap = ramp;
+  m.flatShading = flat;
+  if(rim > 0) rimLight(m, rim);
+  toonMats.push(m);
+  return m;
+}
+/* kenar ışığı: kameraya dik bakan yüzeylerde gökyüzü rengi bir hat — silüeti ayırır */
+function rimLight(m, k){
+  m.userData.rim = k;
+  m.onBeforeCompile = sh => {
+    sh.uniforms.rimK = { value:k };
+    sh.uniforms.rimC = { value:RIM_COLOR };
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float rimK;\nuniform vec3 rimC;')
+      .replace('#include <opaque_fragment>',
+        '{ float rf = 1.0 - clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);\n' +
+        '  outgoingLight += rimC * rimK * pow(rf, 3.5); }\n' +
+        '#include <opaque_fragment>');
+  };
+  m.customProgramCacheKey = () => 'rim' + k.toFixed(2);
+}
 
 const skyMat = new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite:false,
@@ -1100,7 +1157,7 @@ function grainTexture(size, scale, lo, hi, dots){
   return t;
 }
 const grainTex = grainTexture(256, 1, 0.78, 1.0, 900);
-const terrainMat = new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.97, map:grainTex, envMapIntensity:0.25 });
+const terrainMat = toon({ vertexColors:true, map:grainTex, ramp:RAMP_SOFT, rim:0.0 });
 function terrainChunk(i0, j0, i1, j1, mat){
   const pos = [], col = [], idx = [], uv = [];
   const w = i1 - i0 + 1;
@@ -1205,25 +1262,34 @@ const water = new THREE.Mesh(
           float h = texture2D(uHeight, uv).r * 30.0 - 5.0;
           depth = max(0.0, -h);
         }
-        float t = smoothstep(0.0, 3.0, depth);
+        /* --- stilize su: derinlik sürekli bir geçiş değil, dört renk bandı --- */
+        float t = smoothstep(0.0, 4.2, depth);
+        t = clamp(floor(t*4.0)/3.0, 0.0, 1.0);
         vec3 col = mix(uShallow, uDeep, t);
-        col = mix(col*1.18, col, smoothstep(0.0, 0.9, depth));
         vec3 N = normalize(vec3(vN.x, vN.z, -vN.y));
         vec3 V = normalize(cameraPosition - vW);
+        /* gökyüzü yansıması da bir basamak — çizgi filmde yumuşak geçiş yok */
         float fres = pow(1.0 - max(dot(N, V), 0.0), 3.4);
-        col = mix(col, uSky, fres*0.62);
+        col = mix(col, uSky, smoothstep(0.16, 0.30, fres)*0.5 + fres*0.14);
         vec3 L = normalize(uSun);
-        float spec = pow(max(dot(reflect(-L, N), V), 0.0), 160.0);
-        col += uSunCol * spec * 1.4;
-        col += uSunCol * pow(max(dot(reflect(-L, N), V), 0.0), 9.0) * 0.045;
+        /* güneş yansıması: dağılmış parlaklık yerine düz beyaz lekeler */
+        float sp = pow(max(dot(reflect(-L, N), V), 0.0), 70.0);
+        col += uSunCol * smoothstep(0.30, 0.52, sp) * 1.25;
+        col += uSunCol * pow(max(dot(reflect(-L, N), V), 0.0), 9.0) * 0.05;
         float sparkle = noise(vW.xz*2.1 + uTime*0.35);
-        col += vec3(0.9,0.97,1.0) * smoothstep(0.93, 1.0, sparkle) * 0.1;
-        float band = 1.0 - smoothstep(0.0, 0.7, depth);
+        col += vec3(0.9,0.97,1.0) * step(0.955, sparkle) * 0.22;
+        /* --- iki köpük hattı: kıyı çizgisi ve biraz açıktaki kabarma --- */
         float fn = noise(vW.xz*0.95 + vec2(uTime*0.55, -uTime*0.38));
-        float foam = smoothstep(0.42, 0.95, band * (0.55 + fn*0.9));
-        col = mix(col, vec3(0.96,0.99,1.0), foam*0.92);
-        float alpha = mix(0.80, 0.97, smoothstep(0.0, 1.6, depth));
-        alpha = max(alpha, foam);
+        float band = 1.0 - smoothstep(0.0, 1.35, depth);
+        float foam = step(0.42, band*(0.52 + fn*0.95));
+        float fn2 = noise(vW.xz*0.62 + vec2(-uTime*0.3, uTime*0.22));
+        float band2 = smoothstep(0.30, 0.62, 1.0 - smoothstep(0.0, 2.6, depth));
+        float foam2 = step(0.58, band2*(0.55 + fn2*0.95))*0.55;
+        float fm = max(foam, foam2);
+        col = mix(col, vec3(0.97,0.995,1.0), fm);
+        /* saydamlık da bantlı: sığda kum görünür, derinde su kapanır */
+        float alpha = mix(0.72, 0.98, t);
+        alpha = max(alpha, fm);
         gl_FragColor = vec4(col, alpha);
       }`
   })
@@ -1415,9 +1481,9 @@ for(const r of W.roads){
   }
 }
 const paveTex = grainTexture(256, 1, 0.82, 1.0, 1400);
-const roadMat = new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.95, map:paveTex,
+const roadMat = toon({ vertexColors:true, map:paveTex, ramp:RAMP_SOFT, rim:0.0,
                                                  envMapIntensity:0.22, side:THREE.DoubleSide });
-const kerbMat = new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.98, map:paveTex,
+const kerbMat = toon({ vertexColors:true, map:paveTex, ramp:RAMP_SOFT, rim:0.12,
                                                  envMapIntensity:0.2, side:THREE.DoubleSide });
 scene.add(meshFrom(kP, kC, kI, kerbMat, false, 1.0));
 scene.add(meshFrom(rP, rC, rI, roadMat, false, 1.0));
@@ -1612,9 +1678,9 @@ for(const b of buildingList){
   b.doorFace = [fx, fz, nx2, nz2, ux2, uz2, halfSpan];
 }
 
-const matWall = new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.88, envMapIntensity:0.35, side:THREE.DoubleSide });
-const matRoof = new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.72, envMapIntensity:0.4, side:THREE.DoubleSide });
-const matGlass = new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.14, metalness:0.55, envMapIntensity:1.5, side:THREE.DoubleSide });
+const matWall = toon({ vertexColors:true, roughness:0.88, envMapIntensity:0.35, side:THREE.DoubleSide });
+const matRoof = toon({ vertexColors:true, roughness:0.72, envMapIntensity:0.4, side:THREE.DoubleSide });
+const matGlass = toon({ vertexColors:true, roughness:0.14, metalness:0.55, envMapIntensity:1.5, side:THREE.DoubleSide });
 scene.add(meshFrom(wP, wC, wI, matWall, true));
 scene.add(meshFrom(roP, roC, roI, matRoof, true));
 scene.add(meshFrom(gP, gC, gI, matGlass, false));
@@ -1682,7 +1748,7 @@ scene.add(meshFrom(wallP, wallC, wallI, matWall, true));
       put.push(['dish', x, b.flat ? b.y1 : b.y1 + slope*0.5, z, rand()*6.283]);
     }
   }
-  const mat = new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.62, metalness:0.15 });
+  const mat = toon({ vertexColors:true, roughness:0.62, metalness:0.15 });
   for(const [key, geo] of [['solar', solarGeo], ['chim', chimGeo], ['tank', tankGeo], ['dish', dishGeo]]){
     const list = put.filter(p => p[0] === key);
     if(!list.length) continue;
@@ -1701,8 +1767,8 @@ scene.add(meshFrom(wallP, wallC, wallI, matWall, true));
 
 /* ---------------- havuzlar (uydudan) ---------------- */
 step(.62, 'Havuzlar dolduruluyor…');
-const poolWater = new THREE.MeshStandardMaterial({ color:0x36b6c8, roughness:0.12, metalness:0.1, transparent:true, opacity:0.92 });
-const poolDeck  = new THREE.MeshStandardMaterial({ color:0xe9e2d2, roughness:0.9 });
+const poolWater = toon({ color:0x36b6c8, roughness:0.12, metalness:0.1, transparent:true, opacity:0.92 });
+const poolDeck  = toon({ color:0xe9e2d2, roughness:0.9 });
 for(const p of W.pools){
   const cx = px2x(p.x), cz = pz2z(p.y);
   const pw = Math.max(2.5, p.w * S), pd = Math.max(2.0, p.d * S);
@@ -1749,7 +1815,7 @@ const palmGeo = (() => {
   return mergeSimple(parts, cols);
 })();
 
-const treeMat = new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.93 });
+const treeMat = toon({ vertexColors:true, rim:0.34 });
 const CHUNK = 130;
 const buckets = new Map();
 for(const t of W.trees){
@@ -1783,7 +1849,7 @@ for(const [key, list] of buckets){
 
 /* begonviller */
 const bougs = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 7, 5),
-  new THREE.MeshStandardMaterial({ color:0xc2417f, roughness:0.85 }), 280);
+  toon({ color:0xc2417f, roughness:0.85 }), 280);
 let nb = 0;
 for(const b of buildingList){
   if(nb >= bougs.count || rand() < 0.5) continue;
@@ -1809,7 +1875,7 @@ const lampGeo = (() => {
     [new THREE.Color(0x9aa0a4), new THREE.Color(0x9aa0a4), new THREE.Color(0xe8e4d8)]);
 })();
 const lamps = new THREE.InstancedMesh(lampGeo,
-  new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.6, metalness:0.3 }), Math.max(1, lampSpots.length));
+  toon({ vertexColors:true, roughness:0.6, metalness:0.3 }), Math.max(1, lampSpots.length));
 lamps.castShadow = true;
 lampSpots.forEach((p, i) => {
   dummy.position.set(p[0], terrainH(p[0], p[1]), p[1]);
@@ -1839,7 +1905,7 @@ for(let ci = 0; ci < W.coast.length; ci++){
     }
   }
 }
-const rockMat = new THREE.MeshStandardMaterial({ color:0x9a9280, roughness:1, flatShading:true });
+const rockMat = toon({ color:0x9a9280, roughness:1, flatShading:true });
 const rockGeo = new THREE.IcosahedronGeometry(1, 0);
 const rockChunks = new Map();
 for(const p of rockList){
@@ -1866,8 +1932,8 @@ for(const [, list] of rockChunks){
 /* iskele + tekneler */
 const boats = [];
 (() => {
-  const deckMat = new THREE.MeshStandardMaterial({ color:0xb99a6d, roughness:0.95 });
-  const postMat = new THREE.MeshStandardMaterial({ color:0x6d5a42, roughness:1 });
+  const deckMat = toon({ color:0xb99a6d, roughness:0.95 });
+  const postMat = toon({ color:0x6d5a42, roughness:1 });
   const a = [px2x(872), pz2z(316)], b = [px2x(978), pz2z(300)];
   const len = Math.hypot(b[0]-a[0], b[1]-a[1]);
   const deck = new THREE.Mesh(new THREE.BoxGeometry(len, 0.3, 3.4), deckMat);
@@ -1884,9 +1950,9 @@ const boats = [];
     post.castShadow = true;
     scene.add(post);
   }
-  const hullMat = new THREE.MeshStandardMaterial({ color:0xf5f1e6, roughness:0.6 });
-  const stripeMat = new THREE.MeshStandardMaterial({ color:0x2b7fb0, roughness:0.6 });
-  const sailMat = new THREE.MeshStandardMaterial({ color:0xfdfaf2, roughness:0.85, side:THREE.DoubleSide });
+  const hullMat = toon({ color:0xf5f1e6, roughness:0.6 });
+  const stripeMat = toon({ color:0x2b7fb0, roughness:0.6 });
+  const sailMat = toon({ color:0xfdfaf2, roughness:0.85, side:THREE.DoubleSide });
   for(const [ipx, ipy] of [[905,288],[930,276],[952,292],[300,330],[250,300],[640,110],[700,95],[1120,330],[1010,268]]){
     const x = px2x(ipx), z = pz2z(ipy);
     if(terrainH(x, z) > -0.2) continue;
@@ -1913,7 +1979,7 @@ const boats = [];
 
 /* plaj şemsiyeleri */
 (() => {
-  const poleMat = new THREE.MeshStandardMaterial({ color:0xd9d2c4, roughness:0.9 });
+  const poleMat = toon({ color:0xd9d2c4, roughness:0.9 });
   const tops = [0xe8705a, 0xf0b64a, 0x45c8c0, 0xf3e7d2];
   let n = 0;
   for(let g2 = 0; g2 < 4000 && n < 30; g2++){
@@ -1925,7 +1991,7 @@ const boats = [];
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.3, 5), poleMat);
     pole.position.y = 1.15;
     const top = new THREE.Mesh(new THREE.ConeGeometry(1.35, 0.62, 10),
-      new THREE.MeshStandardMaterial({ color:pick(tops), roughness:0.85, side:THREE.DoubleSide }));
+      toon({ color:pick(tops), roughness:0.85, side:THREE.DoubleSide }));
     top.position.y = 2.35;
     grp.add(pole, top);
     grp.position.set(x, h, z);
@@ -1940,7 +2006,7 @@ const boats = [];
    kafede pergola ve masalar, tepede su deposu, site girişinde kapı.     */
 step(.86, 'Mekânlar kuruluyor…');
 
-const M = (c, r, m) => new THREE.MeshStandardMaterial({ color:c, roughness:r === undefined ? 0.9 : r, metalness:m || 0 });
+const M = (c, r, m) => toon({ color:c, roughness:r === undefined ? 0.9 : r, metalness:m || 0 });
 const PM = {
   wood:M(0xa5825a, 0.92), woodD:M(0x6f5636, 0.95), plank:M(0xc8a878, 0.9),
   white:M(0xf6f0e2, 0.82), cream:M(0xe8dfc8, 0.88), stone:M(0xb9ab92, 0.96),
@@ -2063,7 +2129,7 @@ function mkHoop(dir){
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.23, 0.025, 6, 16), PM.red);
   ring.rotation.x = Math.PI/2; ring.position.set(0, 2.98, dir*0.98); g.add(ring);
   const net = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.13, 0.36, 10, 1, true),
-    new THREE.MeshStandardMaterial({ color:0xf3efe2, roughness:0.9, side:THREE.DoubleSide, transparent:true, opacity:0.55 }));
+    toon({ color:0xf3efe2, roughness:0.9, side:THREE.DoubleSide, transparent:true, opacity:0.55 }));
   net.position.set(0, 2.8, dir*0.98); g.add(net);
   return g;
 }
@@ -2123,7 +2189,7 @@ function mkGate(name, col){
     g.add(box(0.46, 2.3, 0.46, PM.stone, s*1.7, 1.15, 0));
     g.add(box(0.56, 0.12, 0.56, PM.cream, s*1.7, 2.32, 0));
     const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8),
-      new THREE.MeshStandardMaterial({ color:0xfff0c8, roughness:0.4, emissive:0xffd38a, emissiveIntensity:0.35 }));
+      toon({ color:0xfff0c8, roughness:0.4, emissive:0xffd38a, emissiveIntensity:0.35 }));
     lamp.position.set(s*1.7, 2.56, 0); g.add(lamp);
   }
   const arch = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.09, 7, 18, Math.PI), PM.metal);
@@ -2509,7 +2575,7 @@ for(let j = 1; j < GH-1; j++) for(let i = 1; i < GW-1; i++){
 }
 
 /* instanced ganimet + yeniden doğma havuzu */
-const lootMat = new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.55, metalness:0.05 });
+const lootMat = toon({ vertexColors:true, roughness:0.55, metalness:0.05 });
 const lootIM = {}, lootFree = {};
 const loot = [];
 const dummy2 = new THREE.Object3D();
@@ -2575,12 +2641,12 @@ function dropLoot(id, x, z){
    Her parça adlandırılmış gruplarda durur ki animasyon katmanı
    kalça → omurga → göğüs → boyun zincirini ayrı ayrı çevirebilsin.      */
 step(.93, 'Ali ve Alya hazırlanıyor…');
-const mkMat = (c, r) => new THREE.MeshStandardMaterial({ color:c, roughness:r === undefined ? 0.86 : r });
-const skinMat = c => new THREE.MeshStandardMaterial({ color:c, roughness:0.64, metalness:0 });
-const hairMat = c => new THREE.MeshPhysicalMaterial({ color:c, roughness:0.52, sheen:0.7,
+const mkMat = (c, r) => toon({ color:c, ramp:RAMP_HARD, rim:0.3 });
+const skinMat = c => toon({ color:c, ramp:RAMP_HARD, rim:0.26 });
+const hairMat = c => toon({ color:c, roughness:0.52, sheen:0.7,
                                                       sheenColor:new THREE.Color(0xd8c7a8), sheenRoughness:0.6 });
-const EYE_W = new THREE.MeshStandardMaterial({ color:0xf7f3ea, roughness:0.28 });
-const EYE_D = new THREE.MeshStandardMaterial({ color:0x1d1a16, roughness:0.18 });
+const EYE_W = toon({ color:0xf7f3ea, roughness:0.28 });
+const EYE_D = toon({ color:0x1d1a16, roughness:0.18 });
 const GLINT = new THREE.MeshBasicMaterial({ color:0xffffff });
 
 function lathe(profile, mat, seg){
@@ -3073,7 +3139,7 @@ function makeJackal(){
     inn.position.set(0, 0.05, -0.013); inn.rotation.set(-0.18, 0, s*0.2); e.add(inn);
     ears.push(e);
     const eye = new THREE.Mesh(new THREE.SphereGeometry(0.019, 10, 8),
-      new THREE.MeshStandardMaterial({ color:0xf7d368, emissive:0xd8a03a, emissiveIntensity:0.9, roughness:0.3 }));
+      toon({ color:0xf7d368, emissive:0xd8a03a, emissiveIntensity:0.9, roughness:0.3 }));
     eye.position.set(s*0.048, 0.018, -0.07); head.add(eye);
     const pup = new THREE.Mesh(new THREE.SphereGeometry(0.009, 8, 6), EYE_D);
     pup.position.set(s*0.05, 0.018, -0.086); head.add(pup);
@@ -3303,7 +3369,7 @@ scene.add(edibe, sadik);
   /* Sadık'ın soda şişesi */
   const bt = new THREE.Group();
   const glass = lathe([[0.005,0],[0.048,0.01],[0.05,0.14],[0.038,0.19],[0.022,0.215],[0.02,0.26],[0.005,0.262]],
-    new THREE.MeshPhysicalMaterial({ color:0x77b06a, roughness:0.22, transmission:0.35, thickness:0.4, metalness:0 }), 14);
+    toon({ color:0x77b06a, roughness:0.22, transmission:0.35, thickness:0.4, metalness:0 }), 14);
   glass.position.y = -0.26; bt.add(glass);
   const capm = new THREE.Mesh(new THREE.CylinderGeometry(0.023, 0.023, 0.016, 12), mkMat(0xc9b06a, 0.4));
   capm.position.y = 0.005; bt.add(capm);
@@ -3698,7 +3764,7 @@ function bagHTML(){
     </div>
     <div class="sect"><h4>Taşıdıkların</h4><div class="ln"></div></div>
     ${grid ? `<div class="grid">${grid}</div>`
-           : '<p class="note quiet">Çanta boş. Koyun kumsalına in, suya gir, C ile dal — kabuklar dipte parlıyor.</p>'}
+           : '<p class="note quiet">Çanta boş. Koyun kumsalına in, suya gir, Dal tuşuna bas — kabuklar dipte parlıyor.</p>'}
     <div class="sect"><h4>Takım</h4><div class="ln"></div></div>
     ${SHOP.map(s => `<div class="srow${GS.gear[s.k] ? '' : ' own'}">${ic(GEAR_ICON[s.k])}
         <span class="tx"><b>${s.n}</b><small>${GS.gear[s.k] ? 'elinde' : 'yok — büfeden ₺' + s.p}</small></span>
@@ -3784,6 +3850,7 @@ $('b-help').addEventListener('click', () => openModal('help'));
 let fxOn = true;
 function setFx(v){
   fxOn = v;
+  if(typeof bloom !== 'undefined' && bloom) bloom.enabled = v;
   $('b-fx').setAttribute('aria-pressed', v);
   feed(v ? 'Parıltı açık' : 'Parıltı kapalı · daha akıcı', { icon:'star' });
 }
@@ -3855,9 +3922,9 @@ const pebGeo = (() => {
 })();
 const TUFT_N = Math.round(420*Q.scatter), PEB_N = Math.round(220*Q.scatter);
 const tufts = new THREE.InstancedMesh(tuftGeo,
-  new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.95, side:THREE.DoubleSide }), TUFT_N);
+  toon({ vertexColors:true, roughness:0.95, side:THREE.DoubleSide }), TUFT_N);
 const pebs = new THREE.InstancedMesh(pebGeo,
-  new THREE.MeshStandardMaterial({ vertexColors:true, roughness:1, flatShading:true }), PEB_N);
+  toon({ vertexColors:true, roughness:1, flatShading:true }), PEB_N);
 tufts.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 pebs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 tufts.castShadow = false; tufts.receiveShadow = true;
@@ -4147,9 +4214,10 @@ function setTime(k){
   for(const id of ['s-morning','s-noon','s-dusk','s-night'])
     document.getElementById(id).setAttribute('aria-pressed', id === 's-'+k);
   const d = new THREE.Vector3(...t.dir).normalize();
-  sun.color.setHex(t.sun); sun.intensity = t.int;
+  sun.color.setHex(t.sun); sun.intensity = t.int*1.17;   /* toon bantları belirgin olsun diye güneş biraz güçlü */
   hemi.color.setHex(t.hemiSky); hemi.groundColor.setHex(t.hemiGnd);
-  hemi.intensity = k === 'night' ? 0.4 : (k === 'dusk' ? 0.55 : 0.7);
+  /* toon kaplamada ortam yansıması ışık vermiyor; gölge tarafını yarı küre ışığı dolduruyor */
+  hemi.intensity = (k === 'night' ? 0.4 : (k === 'dusk' ? 0.55 : 0.7))*1.45;
   skyMat.uniforms.top.value.setHex(t.top);
   skyMat.uniforms.bot.value.setHex(t.bot);
   skyMat.uniforms.sunDir.value.copy(d);
@@ -4164,6 +4232,7 @@ function setTime(k){
   for(const l of lampLights){ l.visible = GS.night; l.intensity = GS.night ? 42 : 0; }
   refreshEnv();
   applyBloom();
+  applyGrade();
   if(GS.night && !GS.gear.fener) toast('Karanlıkta el feneri olmadan zor — büfeden al', 'bad');
   if(GS.night) toast('Gece: çakallar makide. Fener yak, taş hazırla.');
 }
@@ -5064,38 +5133,131 @@ function animate(){
       UI.depth.textContent = (-P.y).toFixed(1).replace('.', ',') + ' m derinlik';
     } else UI.depth.hidden = true;
   }
-  if(composer && fxOn) composer.render(dt); else renderer.render(scene, camera);
+  if(composer) composer.render(dt); else renderer.render(scene, camera);
 }
 
-/* ---------- parıltı katmanı: fener, lamba, su pırıltısı ---------- */
-let composer = null, bloom = null;
+/* ---------- son kat: dış çizgi, renk derecelendirme, parıltı ----------
+   Çizgi film görünümünün ikinci yarısı burada. Tek ek tam ekran geçişte
+   üç iş birden yapılıyor:
+     1. dış çizgi  — derinlik haritasındaki kırılmalar mürekkep hattına çevrilir
+     2. derecelendirme — doygunluk, saate göre renk tonu, kontrast
+     3. köşe karartma
+   Hepsi tek geçişte olduğu için en zayıf telefonda da açık kalabiliyor;
+   parıltı (bloom) ise pahalı olduğundan yalnız üst kademelerde ekleniyor. */
+let composer = null, bloom = null, stylize = null;
+
+const STYLIZE_SHADER = {
+  uniforms: {
+    tDiffuse:{ value:null }, tDepth:{ value:null },
+    texel:{ value:new THREE.Vector2(1/1920, 1/1080) },
+    camNear:{ value:0.5 }, camFar:{ value:1000 },
+    inkK:{ value:0.9 }, inkColor:{ value:new THREE.Color(0x2b3a44) },
+    sat:{ value:1.18 }, tint:{ value:new THREE.Color(0xffffff) },
+    lift:{ value:0.0 }, vig:{ value:0.22 },
+  },
+  vertexShader: `varying vec2 vUv;
+    void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse, tDepth;
+    uniform vec2 texel; uniform float camNear, camFar;
+    uniform float inkK, sat, lift, vig;
+    uniform vec3 inkColor, tint;
+    varying vec2 vUv;
+    float viewZ(vec2 uv){
+      float z = texture2D(tDepth, uv).x;
+      float ndc = z*2.0 - 1.0;
+      return (2.0*camNear*camFar)/(camFar + camNear - ndc*(camFar - camNear));
+    }
+    void main(){
+      vec4 c = texture2D(tDiffuse, vUv);
+      /* --- dış çizgi: komşu piksellerle derinlik farkı --- */
+      float d  = viewZ(vUv);
+      float dl = viewZ(vUv - vec2(texel.x, 0.0)), dr = viewZ(vUv + vec2(texel.x, 0.0));
+      float du = viewZ(vUv - vec2(0.0, texel.y)), dd = viewZ(vUv + vec2(0.0, texel.y));
+      /* mesafeye bölünür, yoksa uzak nesnelerin her kenarı çizgi olur */
+      float e = (abs(dl - d) + abs(dr - d) + abs(du - d) + abs(dd - d)) / max(d, 1.0);
+      float edge = smoothstep(0.012, 0.055, e)*inkK;
+      /* ufka yakın çizgiler incelsin */
+      edge *= 1.0 - smoothstep(0.35, 0.95, d/camFar);
+      c.rgb = mix(c.rgb, c.rgb*inkColor, edge);
+      /* --- renk: doygunluk, ton, taban --- */
+      float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+      c.rgb = mix(vec3(l), c.rgb, sat);
+      c.rgb = c.rgb*tint + lift;
+      /* --- köşe karartma --- */
+      vec2 q = vUv - 0.5;
+      c.rgb *= 1.0 - vig*dot(q, q)*2.0;
+      gl_FragColor = c;
+    }`,
+};
+
+/* saate göre derecelendirme — oyunun "çizim kimliği"ni en çok bu belirliyor */
+const GRADE = {
+  morning:{ sat:1.26, tint:0xfff3e4, lift:0.003, ink:0x3a4a52, inkK:0.95, vig:0.26 },
+  noon:   { sat:1.30, tint:0xf4fbff, lift:0.000, ink:0x2b3f4c, inkK:1.00, vig:0.30 },
+  dusk:   { sat:1.22, tint:0xffeedd, lift:0.004, ink:0x47323a, inkK:0.90, vig:0.34 },
+  night:  { sat:1.08, tint:0xd3e2ff, lift:0.008, ink:0x101a2a, inkK:0.65, vig:0.46 },
+};
+function applyGrade(){
+  if(!stylize) return;
+  const g = GRADE[timeKey] || GRADE.noon, u = stylize.uniforms;
+  u.sat.value = g.sat; u.tint.value.setHex(g.tint); u.lift.value = g.lift;
+  u.inkColor.value.setHex(g.ink); u.inkK.value = g.inkK*(tier >= 2 ? 1 : 0.8);
+  u.vig.value = g.vig;
+}
 function applyBloom(){
   if(!bloom) return;
   bloom.strength = GS.night ? 0.78 : (timeKey === 'dusk' ? 0.48 : 0.3);
   bloom.threshold = GS.night ? 0.42 : 0.88;
   bloom.radius = GS.night ? 0.75 : 0.55;
 }
-if(Q.bloom){
-  try{
-    const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }] = await Promise.all([
-      import('three/addons/postprocessing/EffectComposer.js'),
-      import('three/addons/postprocessing/RenderPass.js'),
-      import('three/addons/postprocessing/UnrealBloomPass.js'),
-      import('three/addons/postprocessing/OutputPass.js'),
-    ]);
-    const rt = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { samples:2, type:THREE.HalfFloatType });
-    composer = new EffectComposer(renderer, rt);
-    composer.addPass(new RenderPass(scene, camera));
+try{
+  const [{ EffectComposer }, { RenderPass }, { ShaderPass }, { UnrealBloomPass }, { OutputPass }] = await Promise.all([
+    import('three/addons/postprocessing/EffectComposer.js'),
+    import('three/addons/postprocessing/RenderPass.js'),
+    import('three/addons/postprocessing/ShaderPass.js'),
+    import('three/addons/postprocessing/UnrealBloomPass.js'),
+    import('three/addons/postprocessing/OutputPass.js'),
+  ]);
+  const depthTex = new THREE.DepthTexture(1, 1);
+  depthTex.type = THREE.UnsignedIntType;
+  const rt = new THREE.WebGLRenderTarget(innerWidth, innerHeight, {
+    samples: Q.bloom ? 2 : 0, type:THREE.HalfFloatType, depthTexture:depthTex, depthBuffer:true,
+  });
+  composer = new EffectComposer(renderer, rt);
+  composer.addPass(new RenderPass(scene, camera));
+  stylize = new ShaderPass(STYLIZE_SHADER);
+  stylize.uniforms.camNear.value = camera.near;
+  stylize.uniforms.camFar.value = camera.far;
+  stylize.material.depthTest = false; stylize.material.depthWrite = false;
+  /* EffectComposer iki hedef arasında gidip geliyor ve klonlanan hedefin kendi
+     derinlik dokusu oluyor; o yüzden derinliği her karede okunan tampondan alırız */
+  const basePassRender = stylize.render.bind(stylize);
+  stylize.render = (rnd, wBuf, rBuf, dt, mask) => {
+    stylize.uniforms.tDepth.value = (rBuf && rBuf.depthTexture) || depthTex;
+    basePassRender(rnd, wBuf, rBuf, dt, mask);
+  };
+  composer.addPass(stylize);
+  if(Q.bloom){
     bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth/2, innerHeight/2), 0.3, 0.55, 0.88);
     /* parıltı yarı çözünürlükte hesaplanır — görsel olarak aynı, maliyeti dörtte bir */
     const baseSetSize = bloom.setSize.bind(bloom);
     bloom.setSize = (w, h) => baseSetSize(Math.round(w/2), Math.round(h/2));
     composer.addPass(bloom);
-    composer.addPass(new OutputPass());
-    composer.setSize(innerWidth, innerHeight);
     applyBloom();
-  }catch(e){ composer = null; bloom = null; }
+  }
+  composer.addPass(new OutputPass());
+  composer.setSize(innerWidth, innerHeight);
+  applyGrade();
+}catch(e){ composer = null; bloom = null; stylize = null; console.warn('son kat kurulamadı', e); }
+
+function syncPostSize(){
+  if(!stylize) return;
+  const dpr = renderer.getPixelRatio();
+  stylize.uniforms.texel.value.set(1/(innerWidth*dpr), 1/(innerHeight*dpr));
+  stylize.uniforms.camFar.value = camera.far;
 }
+syncPostSize();
 
 function onResize(){
   camera.aspect = innerWidth/Math.max(1, innerHeight);
@@ -5104,6 +5266,7 @@ function onResize(){
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
   if(composer) composer.setSize(innerWidth, innerHeight);
+  syncPostSize();
   syncTape();
 }
 addEventListener('resize', onResize);
@@ -5126,8 +5289,9 @@ function perfTick(dt){
       const q = QUAL[tier];
       renderer.setPixelRatio(Math.min(devicePixelRatio, q.dpr));
       renderer.setSize(innerWidth, innerHeight);
-      if(composer) composer.setSize(innerWidth, innerHeight);
-      if(!q.bloom) fxOn = false;
+      if(composer){ composer.setSize(innerWidth, innerHeight); syncPostSize(); }
+      if(!q.bloom && bloom){ bloom.enabled = false; fxOn = false; }
+      applyGrade();
       if(q.shadow === 0){ renderer.shadowMap.enabled = false; sun.castShadow = false; }
       feed('Akıcılık için görüntü kalitesi düşürüldü', { icon:'star', hold:2600 });
     }
@@ -5195,7 +5359,7 @@ $('start').addEventListener('click', () => {
   setTimeout(() => { titleEl.hidden = true; }, 600);
   say(GS.who === 'ali' ? 'alya' : 'ali', 'Hadi, koya inip ganimet toplayalım!', 5);
   feed('Kıyıya in, ganimetleri topla', { icon:'shell', hold:4200 });
-  setTimeout(() => feed('Suya gir, C ile dal — kabuklar dipte', { icon:'dive', hold:4200 }), 4600);
+  setTimeout(() => feed('Suya gir, Dal tuşuna bas — kabuklar dipte', { icon:'dive', hold:4200 }), 4600);
   setTimeout(() => feed('Ganimeti Mistral Büfe’de sat, el feneri al', { icon:'coin', hold:4200 }), 9200);
   setTimeout(() => feed('Gece sağ üstteki aydan: çakal avı', { icon:'jackal', hold:4200 }), 13800);
 });
@@ -5207,6 +5371,7 @@ setTimeout(() => {
 window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS,
                        setTime, setMode, flyTo, toast, interact, throwStone, toggleTorch, switchKid,
                        scene, camera, renderer, THREE, setFx, fx:() => fxOn, cam:() => ({ camYaw, camPitch, camDist }),
+                       post:() => ({ composer, stylize, bloom, applyGrade, toonMats, RAMP, RAMP_SOFT, RAMP_HARD, hemi, sun }),
                        setCam:(y, p2, d) => { camYaw = y; if(p2 !== undefined) camPitch = p2; if(d !== undefined) camDist = d; } };
 /* çevrimdışı oynanabilsin diye servis çalışanı — sadece kendi alan adında */
 if('serviceWorker' in navigator && location.protocol === 'https:'){
