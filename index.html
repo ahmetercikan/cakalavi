@@ -1420,6 +1420,8 @@ const BG = 0.9;      /* çarpışma ve yol kotu ızgarası — kaba ızgara bina
 const BGW = Math.ceil(WORLD_W/BG), BGH = Math.ceil(WORLD_H/BG);
 const blockRoad = new Uint8Array(BGW*BGH);
 const blockBld  = new Uint8Array(BGW*BGH);
+/* çatı kotları uçuş için ayrı tutuluyor; ızgara süpürge koduyla birlikte */
+const bldRoof = [];
 /* Yol kaplaması araziden birkaç santim yüksekte duruyor (parke 5,5 cm, eğimli
    yerlerde kesitin iki kenarından yükseği alındığı için biraz daha fazla).
    Karakterin kotu düz arazi yüksekliğinden geliyordu, bu yüzden yolda
@@ -1761,6 +1763,7 @@ for(const b of W.buildings){
     }
   }
   stampRect(blockBld, cx, cz, bw, bd, ang, 0.35);
+  bldRoof.push([cx, cz, bw, bd, ang, Math.max(y1, ridgeY)]);
   buildingList.push({ cx, cz, bw, bd, ang, ground, wallH, L, y1, ridgeY,
                       flat:b.roof === 'flat', alongX:alongXout, ridgeLen, wallCol:wall });
 }
@@ -2372,7 +2375,8 @@ function mkHoop(dir){
   const bb = box(1.7, 1.0, 0.07, PM.white, 0, 3.3, dir*0.7); g.add(bb);
   g.add(box(0.62, 0.46, 0.02, PM.red, 0, 3.18, dir*0.75));
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.23, 0.025, 6, 16), PM.red);
-  ring.rotation.x = Math.PI/2; ring.position.set(0, 2.98, dir*0.98); g.add(ring);
+  ring.rotation.x = Math.PI/2; ring.position.set(0, 2.98, dir*0.98);
+  ring.name = 'pota'; g.add(ring);
   const net = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.13, 0.36, 10, 1, true),
     toon({ color:0xf3efe2, roughness:0.9, side:THREE.DoubleSide, transparent:true, opacity:0.55 }));
   net.position.set(0, 2.8, dir*0.98); g.add(net);
@@ -3148,6 +3152,28 @@ function dressMini(root, B, cfg, who){
 
   let tail = null;
   if(who === 'ali'){
+    /* Ali kıvırcık saçlı bir çocuk. Paketin saçı tek parça köşeli bir
+       blok; kasketin altından çıkan kısma küme küme bukle ekleniyor.
+       Hepsi tek geometride birleştirildi, on dört ayrı çizim olmasın.  */
+    const bukle = [];
+    const koy = (x, y, z, r) => {
+      const g = new THREE.SphereGeometry(r, 8, 6);
+      g.scale(1, 0.92, 0.92); g.translate(x, y, z);
+      bukle.push(g);
+    };
+    for(let i = 0; i < 9; i++){
+      const a = Math.PI*(0.18 + i/8*0.64);          /* arkadan kulağa doğru yay */
+      const r = 0.300 + (i % 2)*0.012;
+      for(const sx of [-1, 1]){
+        koy(sx*Math.sin(a)*r, 0.236 - Math.cos(a)*0.028 - (i % 3)*0.021,
+            -Math.cos(a)*(r*0.82), 0.062 + (i % 3)*0.009);
+      }
+    }
+    koy(0, 0.208, -0.272, 0.070); koy(0, 0.144, -0.258, 0.060);
+    koy(-0.118, 0.300, 0.208, 0.050); koy(0.126, 0.296, 0.206, 0.046);
+    hs.add(new THREE.Mesh(mergeSimple(bukle, bukle.map(() => hairC)),
+      toon({ vertexColors:true, ramp:RAMP_SOFT, rim:0.22 })));
+    hs.children[hs.children.length - 1].castShadow = true;
     /* kasket: kubbe kafayı sarıyor, siperlik silüete kırık veriyor.
        Köşeli kutu şapka gibi durmasın diye tepe yarım küre.            */
     const kub = new THREE.Mesh(new THREE.SphereGeometry(0.306, 18, 10, 0, 6.283, 0, 1.57), M.aksan);
@@ -3302,7 +3328,8 @@ function animMini(k, st, dt){
      koşma 1.0'da oturuyor, ikisi de bandın dışında kaldı.                 */
   if(u.spd > 0.80) M.fast = true; else if(u.spd < 0.72) M.fast = false;
   let want = 'idle', rate = 1;
-  if(st.swim){ want = 'sprint'; rate = 0.75; }
+  if(st.fly){ want = M.act['sit'] ? 'sit' : 'idle'; rate = 1; }
+  else if(st.swim){ want = 'sprint'; rate = 0.75; }
   else if(st.air) want = M.airT > 0.18 ? 'fall' : 'jump';
   else if(M.fast && u.spd > 0.06){ want = 'sprint'; rate = 0.75 + u.spd*0.6; }
   else if(u.spd > 0.06){ want = 'walk'; rate = 0.55 + u.spd*1.5; }
@@ -3350,7 +3377,7 @@ function animMini(k, st, dt){
 
   /* yüzerken gövde öne yatar, dalışta daha dik */
   const b = M.body;
-  const tilt = st.dive ? -1.25 : (st.swim ? -1.1 : 0);
+  const tilt = st.dive ? -1.25 : (st.swim ? -1.1 : (st.fly ? -0.16 : 0));
   b.rotation.x = lp(b.rotation.x, tilt, dt*6);
   b.position.y = lp(b.position.y, M.baseY + (st.swim ? 0.26 : 0), dt*6);
   /* sendeleme */
@@ -3858,6 +3885,9 @@ function animJackal(j, sp, dt, t){
 function makeAdult(cfg){
   const G = new THREE.Group();
   const skin = skinMat(cfg.skin), top = mkMat(cfg.top, 0.9), bot = mkMat(cfg.bot, 0.9);
+  /* bulk: omuz, göğüs ve kol kalınlığını birlikte büyüten tek katsayı.
+     Ayı Murat için 1, diğerleri için 0.                                 */
+  const BK = cfg.bulk || 0;
   G.add(contactBlob(0.42));
   const body = new THREE.Group(); G.add(body);
   const hips = new THREE.Group(); hips.position.y = 0.88; body.add(hips);
@@ -3881,14 +3911,28 @@ function makeAdult(cfg){
   const spine = new THREE.Group(); spine.position.y = 0.06; hips.add(spine);
   const chest = new THREE.Group(); chest.position.y = 0.04; spine.add(chest);
   const bellyR = cfg.belly ? 0.215 : 0.17;
-  const torso = lathe([[0.005,0],[0.16,0.01],[bellyR,0.1],[bellyR + 0.01,0.2],[0.19,0.32],[0.165,0.4],[0.1,0.43],[0.005,0.432]], top, 20);
-  torso.scale.z = cfg.belly ? 0.92 : 0.78; chest.add(torso);
+  /* kaslıda bel ince, göğüs ve sırt geniş: ters üçgen kesit */
+  const torso = BK
+    ? lathe([[0.005,0],[0.168,0.012],[0.186,0.08],[0.232,0.19],[0.252,0.29],[0.236,0.37],[0.13,0.432],[0.005,0.436]], top, 20)
+    : lathe([[0.005,0],[0.16,0.01],[bellyR,0.1],[bellyR + 0.01,0.2],[0.19,0.32],[0.165,0.4],[0.1,0.43],[0.005,0.432]], top, 20);
+  torso.scale.z = BK ? 0.84 : (cfg.belly ? 0.92 : 0.78); chest.add(torso);
+  if(BK){
+    /* göğüs kası ve omuz yuvarlakları: siluet düz silindir kalmasın */
+    for(const s2 of [-1, 1]){
+      const pec = new THREE.Mesh(new THREE.SphereGeometry(0.098, 14, 10), top);
+      pec.scale.set(1.08, 0.78, 0.6); pec.position.set(s2*0.092, 0.268, -0.158); chest.add(pec);
+    }
+  }
   if(cfg.belly){
     const vest = new THREE.Mesh(new THREE.TorusGeometry(bellyR + 0.005, 0.018, 8, 24), mkMat(0x47535e, 0.9));
     vest.rotation.x = Math.PI/2; vest.position.y = 0.04; vest.scale.z = 0.92; chest.add(vest);
   }
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.062, 0.08, 12), skin);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.052 + BK*0.026, 0.062 + BK*0.03, 0.08, 12), skin);
   neck.position.y = 0.45; chest.add(neck);
+  if(BK) for(const s2 of [-1, 1]){
+    const trap = new THREE.Mesh(new THREE.SphereGeometry(0.082, 12, 9), skin);
+    trap.scale.set(1.2, 0.56, 0.86); trap.position.set(s2*0.094, 0.432, 0.012); chest.add(trap);
+  }
 
   const head = new THREE.Group(); head.position.y = 0.54; chest.add(head);
   const skull = new THREE.Mesh(new THREE.SphereGeometry(0.128, 20, 15), skin);
@@ -3926,6 +3970,15 @@ function makeAdult(cfg){
     tail.position.set(0, -0.14, 0.126); tail.rotation.x = -0.3; head.add(tail);
     const bun = new THREE.Mesh(new THREE.SphereGeometry(0.056, 12, 9), mkMat(0xb9b2a6, 0.92));
     bun.scale.set(1, 0.8, 0.9); bun.position.set(0, 0.0, 0.1); head.add(bun);
+  } else if(cfg.beard){
+    /* Ayı Murat: kısa saç, dolgun sakal, kalın bıyık */
+    const hairM = hairMat(cfg.hair || 0x2a2018);
+    const cap2 = new THREE.Mesh(new THREE.SphereGeometry(0.133, 18, 12, 0, 6.283, 0, 1.16), hairM);
+    cap2.scale.set(1, 0.9, 1); cap2.position.y = 0.014; head.add(cap2);
+    const bd = new THREE.Mesh(new THREE.SphereGeometry(0.128, 20, 14, Math.PI*0.5, Math.PI, 0.72, 1.12), hairM);
+    bd.scale.set(1.03, 1.12, 1.06); bd.position.set(0, -0.016, -0.008); head.add(bd);
+    const mst = new THREE.Mesh(new THREE.BoxGeometry(0.086, 0.026, 0.02), hairM);
+    mst.position.set(0, -0.036, -0.112); head.add(mst);
   } else {
     const fringe = new THREE.Mesh(new THREE.SphereGeometry(0.129, 16, 11, 0, 6.283, 1.0, 0.55), mkMat(0xb9b2a6, 0.92));
     fringe.position.y = 0.012; head.add(fringe);
@@ -3941,23 +3994,28 @@ function makeAdult(cfg){
   }
 
   const arm = s => {
-    const g = new THREE.Group(); g.position.set(s*0.2, 0.38, 0); chest.add(g);
-    const sh = new THREE.Mesh(new THREE.SphereGeometry(0.07, 14, 10), top); g.add(sh);
-    g.add(bone(0.05, 0.042, 0.24, cfg.sleeve === false ? skin : top));
+    const g = new THREE.Group(); g.position.set(s*(0.2 + BK*0.098), 0.38 - BK*0.012, 0); chest.add(g);
+    const sh = new THREE.Mesh(new THREE.SphereGeometry(0.07 + BK*0.036, 14, 10),
+                              BK ? skin : top); g.add(sh);
+    g.add(bone(0.05 + BK*0.032, 0.042 + BK*0.018, 0.24, cfg.sleeve === false ? skin : top));
+    if(BK){
+      const bic = new THREE.Mesh(new THREE.SphereGeometry(0.068, 12, 9), skin);
+      bic.scale.set(1, 1.35, 1); bic.position.y = -0.088; g.add(bic);
+    }
     if(cfg.sleeve !== false){
       const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.046, 0.011, 7, 16), mkMat(cfg.trim || 0xe4dac8, 0.9));
       cuff.rotation.x = Math.PI/2; cuff.position.y = -0.235; g.add(cuff);
     }
     const lo = new THREE.Group(); lo.position.y = -0.24; g.add(lo);
-    lo.add(bone(0.04, 0.032, 0.22, skin));
+    lo.add(bone(0.04 + BK*0.022, 0.032 + BK*0.012, 0.22, skin));
     const hand = makeHand(skin, s); hand.position.y = -0.225; hand.scale.setScalar(1.15); lo.add(hand);
     return { g, lo, hand };
   };
   const leg = s => {
     const g = new THREE.Group(); g.position.set(s*0.095, -0.08, 0); hips.add(g);
-    g.add(bone(0.072, 0.055, 0.38, cfg.dress ? skin : bot));
+    g.add(bone(0.072 + BK*0.03, 0.055 + BK*0.016, 0.38, cfg.dress ? skin : bot));
     const lo = new THREE.Group(); lo.position.y = -0.38; g.add(lo);
-    lo.add(bone(0.052, 0.038, 0.36, skin));
+    lo.add(bone(0.052 + BK*0.022, 0.038 + BK*0.01, 0.36, skin));
     const foot = new THREE.Group(); foot.position.y = -0.37; lo.add(foot);
     const sole = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), mkMat(cfg.shoe || 0x6b5a46, 0.9));
     sole.scale.set(0.05, 0.018, 0.1); sole.position.z = -0.03; foot.add(sole);
@@ -4157,6 +4215,569 @@ const JACK = [];
   }
 })();
 
+
+/* ---------- site sakinleri, sokak hayvanları, deniz ----------------------
+   Harita doluydu ama boştu: evler, sokaklar ve kumsal vardı, hiç kimse
+   yoktu. Buraya gelen her şey aynı kurala uyuyor -- kaba hatlı, az
+   parçalı gövdeler ve oyuncuya yakın olanların güncellenmesi. Uzaktaki
+   bir sakin ne çiziliyor ne de hesaplanıyor; yüz metre ötede yirmi kişi
+   dursa bile kare hızı değişmiyor.                                      */
+const LIFE_R = 108;                      /* bu kadar yakındakiler canlı */
+
+/* kaba hatlı yetişkin: Kenney çocuklarının dilini tutturan dokuz parça */
+function makeVillager(cfg){
+  const G = new THREE.Group();
+  const skin = skinMat(cfg.skin), top = mkMat(cfg.top, 0.9), bot = mkMat(cfg.bot, 0.9);
+  const hair = hairMat(cfg.hair || 0x3a2b20);
+  G.add(contactBlob(0.38));
+  const body = new THREE.Group(); body.name = 'body'; G.add(body);
+  const hips = new THREE.Group(); hips.position.y = 0.80; hips.name = 'hips'; body.add(hips);
+
+  const legs = [];
+  for(const sx of [-1, 1]){
+    const g = new THREE.Group(); g.position.set(sx*0.098, 0, 0); hips.add(g);
+    g.name = sx < 0 ? 'legL' : 'legR';
+    const up = new THREE.Mesh(new THREE.BoxGeometry(0.152, 0.46, 0.17), cfg.dress ? skin : bot);
+    up.position.y = -0.23; g.add(up);
+    const lo = new THREE.Group(); lo.position.y = -0.46; g.add(lo);
+    lo.name = g.name + 'lo';
+    const sh = new THREE.Mesh(new THREE.BoxGeometry(0.158, 0.34, 0.20), skin);
+    sh.position.set(0, -0.17, 0.014); lo.add(sh);
+    const ft = new THREE.Mesh(new THREE.BoxGeometry(0.166, 0.072, 0.264), mkMat(cfg.shoe || 0x4a4038, 0.9));
+    ft.position.set(0, -0.336, -0.03); lo.add(ft);
+    legs.push({ g, lo });
+  }
+  const chest = new THREE.Group(); chest.position.y = 0.02; chest.name = 'chest'; hips.add(chest);
+  if(cfg.dress){
+    const sk = new THREE.Mesh(new THREE.CylinderGeometry(0.168, 0.262, 0.52, 12), top);
+    sk.position.y = -0.24; chest.add(sk);
+  }
+  const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.33, 0.46, 0.21), top);
+  trunk.position.y = 0.22; chest.add(trunk);
+  const arms = [];
+  for(const sx of [-1, 1]){
+    const g = new THREE.Group(); g.position.set(sx*0.205, 0.40, 0); chest.add(g);
+    g.name = sx < 0 ? 'armL' : 'armR';
+    const up = new THREE.Mesh(new THREE.BoxGeometry(0.106, 0.28, 0.122), cfg.bare ? skin : top);
+    up.position.y = -0.14; g.add(up);
+    const lo = new THREE.Group(); lo.position.y = -0.28; g.add(lo);
+    lo.name = g.name + 'lo';
+    const fa = new THREE.Mesh(new THREE.BoxGeometry(0.098, 0.30, 0.112), skin);
+    fa.position.y = -0.15; lo.add(fa);
+    arms.push({ g, lo });
+  }
+  const head = new THREE.Group(); head.position.y = 0.52; head.name = 'head'; chest.add(head);
+  /* Baş rijit: dokuz ayrı kutu dokuz çizim demekti. Hepsi tek geometride
+     birleştirilip köşe rengiyle boyanıyor -- sakin başına sekiz çizim
+     daha az.                                                            */
+  {
+    const gs = [], cs = [];
+    const put = (g, x, y, z, col) => { g.translate(x, y, z); gs.push(g); cs.push(new THREE.Color(col)); };
+    put(new THREE.BoxGeometry(0.246, 0.254, 0.236), 0, 0.112, 0, cfg.skin);
+    for(const sx of [-1, 1]){
+      put(new THREE.BoxGeometry(0.042, 0.05, 0.016), sx*0.056, 0.118, -0.122, 0x1d1a16);
+      put(new THREE.BoxGeometry(0.024, 0.07, 0.07), sx*0.13, 0.102, 0.004, cfg.skin);
+    }
+    if(cfg.scarf){
+      put(new THREE.BoxGeometry(0.268, 0.228, 0.262), 0, 0.136, 0.018, cfg.scarf);
+      put(new THREE.BoxGeometry(0.272, 0.08, 0.052), 0, 0.198, -0.114, cfg.scarf);
+    }else{
+      put(new THREE.BoxGeometry(0.258, 0.11, 0.248), 0, 0.198, 0.008, cfg.hair || 0x3a2b20);
+      if(cfg.hat){
+        put(new THREE.CylinderGeometry(0.106, 0.118, 0.1, 12), 0, 0.272, 0, cfg.hat);
+        put(new THREE.CylinderGeometry(0.212, 0.212, 0.018, 14), 0, 0.226, 0, cfg.hat);
+      }
+    }
+    head.add(new THREE.Mesh(mergeSimple(gs, cs), toon({ vertexColors:true, ramp:RAMP_SKIN, rim:0.2 })));
+  }
+  G.traverse(o => { if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+  G.children[0].castShadow = false; G.children[0].receiveShadow = false;
+  G.scale.setScalar(cfg.scale || 1);
+  G.userData = { body, hips, chest, head, legs, arms, ph:rand()*6.28, spd:0 };
+  return G;
+}
+/* yürüme, oturma, yüzme ve "bir işle meşgul" duruşları tek yerde */
+function animVillager(o, st, dt){
+  const u = o.userData;
+  u.spd = lp(u.spd, Math.min(1, st.spd || 0), dt*7);
+  const s = u.spd;
+  u.ph += dt*(2.2 + s*6.2);
+  const p = u.ph, sL = Math.sin(p), cL = Math.cos(p);
+  if(st.sit){
+    u.hips.position.y = lp(u.hips.position.y, 0.52, dt*6);
+    u.legs[0].g.rotation.x = lp(u.legs[0].g.rotation.x, -1.42, dt*6);
+    u.legs[1].g.rotation.x = lp(u.legs[1].g.rotation.x, -1.42, dt*6);
+    u.legs[0].lo.rotation.x = lp(u.legs[0].lo.rotation.x, 1.36, dt*6);
+    u.legs[1].lo.rotation.x = lp(u.legs[1].lo.rotation.x, 1.36, dt*6);
+    u.arms[0].g.rotation.x = lp(u.arms[0].g.rotation.x, -0.42, dt*6);
+    u.arms[1].g.rotation.x = lp(u.arms[1].g.rotation.x, -0.42, dt*6);
+    u.arms[0].lo.rotation.x = lp(u.arms[0].lo.rotation.x, -0.5, dt*6);
+    u.arms[1].lo.rotation.x = lp(u.arms[1].lo.rotation.x, -0.5, dt*6);
+    u.chest.rotation.x = lp(u.chest.rotation.x, 0.06 + Math.sin(p*0.5)*0.015, dt*4);
+    return;
+  }
+  if(st.swim){
+    /* su yüzeyinde: gövde yatık, kollar sırayla kulaç atıyor */
+    u.hips.position.y = lp(u.hips.position.y, 0.80, dt*6);
+    u.body.rotation.x = lp(u.body.rotation.x, -1.18, dt*5);
+    u.arms[0].g.rotation.x = -1.6 + Math.sin(p*1.6)*1.5;
+    u.arms[1].g.rotation.x = -1.6 + Math.sin(p*1.6 + Math.PI)*1.5;
+    u.arms[0].lo.rotation.x = -0.3; u.arms[1].lo.rotation.x = -0.3;
+    u.legs[0].g.rotation.x = Math.sin(p*2.2)*0.34;
+    u.legs[1].g.rotation.x = Math.sin(p*2.2 + Math.PI)*0.34;
+    u.legs[0].lo.rotation.x = u.legs[1].lo.rotation.x = 0.12;
+    return;
+  }
+  u.body.rotation.x = lp(u.body.rotation.x, 0, dt*5);
+  u.hips.position.y = lp(u.hips.position.y, 0.80 + Math.cos(p*2)*0.014*s, dt*8);
+  u.hips.rotation.y = lp(u.hips.rotation.y, -sL*0.08*s, dt*10);
+  u.chest.rotation.y = lp(u.chest.rotation.y, sL*0.11*s, dt*10);
+  u.chest.rotation.x = lp(u.chest.rotation.x, 0.02 + s*0.06, dt*5);
+  u.legs[0].g.rotation.x = sL*(0.22 + s*0.42);
+  u.legs[1].g.rotation.x = -sL*(0.22 + s*0.42);
+  u.legs[0].lo.rotation.x = -pos(cL)*(0.2 + s*0.5);
+  u.legs[1].lo.rotation.x = -pos(-cL)*(0.2 + s*0.5);
+  /* elinde bir iş varsa (sulama, süpürme) kollar sabit durur */
+  if(st.busy){
+    u.arms[0].g.rotation.x = lp(u.arms[0].g.rotation.x, -0.9 + Math.sin(p*0.9)*0.18, dt*6);
+    u.arms[1].g.rotation.x = lp(u.arms[1].g.rotation.x, -1.0 + Math.sin(p*0.9 + 0.7)*0.18, dt*6);
+    u.arms[0].lo.rotation.x = lp(u.arms[0].lo.rotation.x, -0.5, dt*6);
+    u.arms[1].lo.rotation.x = lp(u.arms[1].lo.rotation.x, -0.5, dt*6);
+  }else{
+    u.arms[0].g.rotation.x = -sL*(0.26 + s*0.5);
+    u.arms[1].g.rotation.x = sL*(0.26 + s*0.5);
+    u.arms[0].lo.rotation.x = -0.12 - pos(-cL)*0.35*s;
+    u.arms[1].lo.rotation.x = -0.12 - pos(cL)*0.35*s;
+  }
+  u.head.rotation.y = lp(u.head.rotation.y, st.look || 0, dt*3);
+}
+
+/* ---- sokak hayvanları: kedi ve köpek ---- */
+function makeBeast(cfg){
+  const G = new THREE.Group();
+  const fur = mkMat(cfg.fur, 0.92), dark = mkMat(cfg.dark, 0.92), pale = mkMat(cfg.pale, 0.9);
+  const K = cfg.k;                                  /* genel boy çarpanı */
+  G.add(contactBlob(0.3*K));
+  const spine = new THREE.Group(); spine.position.y = 0.30*K; spine.name = 'spine'; G.add(spine);
+  const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.18*K, 0.2*K, 0.44*K), fur);
+  spine.add(trunk);
+  const bel = new THREE.Mesh(new THREE.BoxGeometry(0.16*K, 0.07*K, 0.34*K), pale);
+  bel.position.y = -0.085*K; spine.add(bel);
+  const neck = new THREE.Group(); neck.position.set(0, 0.07*K, -0.21*K); neck.name = 'neck'; spine.add(neck);
+  const head = new THREE.Group(); head.position.set(0, 0.04*K, -0.08*K); head.name = 'head'; neck.add(head);
+  const skull = new THREE.Mesh(new THREE.BoxGeometry(0.16*K, 0.15*K, 0.17*K), fur);
+  head.add(skull);
+  const snout = new THREE.Mesh(new THREE.BoxGeometry(0.086*K, 0.072*K, cfg.snout*K), dark);
+  snout.position.set(0, -0.028*K, -(0.085 + cfg.snout/2)*K); head.add(snout);
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(0.036*K, 0.03*K, 0.022*K), mkMat(0x241e18, 0.4));
+  nose.position.set(0, -0.012*K, -(0.096 + cfg.snout)*K); head.add(nose);
+  const ears = [];
+  for(const sx of [-1, 1]){
+    const e = new THREE.Group(); e.position.set(sx*0.052*K, 0.082*K, 0.012*K); e.name = 'ear' + (sx < 0 ? 'L' : 'R'); head.add(e);
+    const sh = cfg.ear === 'flop'
+      ? new THREE.Mesh(new THREE.BoxGeometry(0.05*K, 0.12*K, 0.03*K), dark)
+      : new THREE.Mesh(new THREE.ConeGeometry(0.044*K, 0.11*K, 4), fur);
+    sh.position.y = cfg.ear === 'flop' ? -0.04*K : 0.05*K;
+    if(cfg.ear === 'flop') sh.rotation.z = sx*0.22;
+    e.add(sh); ears.push(e);
+    const ey = new THREE.Mesh(new THREE.BoxGeometry(0.028*K, 0.03*K, 0.014*K), EYE_D);
+    ey.position.set(sx*0.05*K, 0.016*K, -0.086*K); head.add(ey);
+  }
+  const legs = [];
+  for(const [sx, sz] of [[-1,-1],[1,-1],[-1,1],[1,1]]){
+    const g = new THREE.Group(); g.position.set(sx*0.07*K, -0.06*K, sz*0.15*K); spine.add(g);
+    g.name = 'leg' + (sx < 0 ? 'L' : 'R') + (sz < 0 ? 'F' : 'B');
+    const up = new THREE.Mesh(new THREE.BoxGeometry(0.056*K, 0.17*K, 0.062*K), fur);
+    up.position.y = -0.085*K; g.add(up);
+    const lo = new THREE.Group(); lo.position.y = -0.17*K; g.add(lo);
+    lo.name = g.name + 'lo';
+    const sh = new THREE.Mesh(new THREE.BoxGeometry(0.05*K, 0.13*K, 0.056*K), dark);
+    sh.position.y = -0.065*K; lo.add(sh);
+    const paw = new THREE.Mesh(new THREE.BoxGeometry(0.058*K, 0.04*K, 0.082*K), dark);
+    paw.position.set(0, -0.15*K, -0.012*K); lo.add(paw);
+    legs.push({ g, lo, ph:(sx*sz > 0 ? 0 : Math.PI), front:sz < 0 });
+  }
+  const tail = new THREE.Group(); tail.position.set(0, 0.08*K, 0.22*K); tail.name = 'tail'; spine.add(tail);
+  let par = tail;
+  for(let i = 0; i < 3; i++){
+    const seg = new THREE.Group(); seg.position.z = i ? 0.08*K : 0.02*K; seg.name = 'tseg' + i; par.add(seg);
+    const m = new THREE.Mesh(new THREE.BoxGeometry((0.05 - i*0.009)*K, (0.05 - i*0.009)*K, 0.09*K), i === 2 ? pale : fur);
+    m.position.z = 0.045*K; seg.add(m);
+    par = seg; tail.userData['s' + i] = seg;
+  }
+  tail.rotation.x = cfg.tailUp ? -1.2 : 0.4;
+  G.traverse(o => { if(o.isMesh) o.castShadow = true; });
+  G.children[0].castShadow = false;
+  G.userData = { spine, neck, head, tail, ears, legs, ph:rand()*6.28, tailUp:!!cfg.tailUp };
+  return G;
+}
+function animBeast(b, sp, dt, t){
+  const u = b.o.userData;
+  u.ph += dt*(2.4 + sp*5.4);
+  const p = u.ph, run = Math.min(1, sp);
+  for(const lg of u.legs){
+    const a = p + lg.ph;
+    lg.g.rotation.x = Math.sin(a)*(0.18 + run*0.5);
+    const flex = pos(Math.cos(a))*(0.26 + run*0.45);
+    lg.lo.rotation.x = lg.front ? -flex : flex;
+  }
+  const sit = b.state === 'sit';
+  u.spine.rotation.x = lp(u.spine.rotation.x, sit ? -0.52 : -0.03 - run*0.05, dt*5);
+  u.spine.position.y = lp(u.spine.position.y, sit ? 0.22*b.k : 0.30*b.k, dt*5);
+  u.neck.rotation.x = lp(u.neck.rotation.x, sit ? 0.42 : (b.state === 'flee' ? -0.1 : 0.06), dt*4);
+  u.head.rotation.y = lp(u.head.rotation.y, Math.sin(t*0.7 + u.ph*0.2)*0.22, dt*3);
+  for(const e of u.ears) e.rotation.x = lp(e.rotation.x, b.state === 'flee' ? -0.4 : 0.05, dt*6);
+  const wag = b.pet > 0 ? 1 : 0.35;
+  u.tail.rotation.x = lp(u.tail.rotation.x, u.tailUp ? -1.2 : (b.pet > 0 ? -0.5 : 0.4), dt*4);
+  u.tail.rotation.y = Math.sin(p*(b.pet > 0 ? 3.2 : 1.0))*(0.2 + wag*0.4);
+  for(let i = 0; i < 3; i++){
+    const g = u.tail.userData['s' + i];
+    if(g) g.rotation.y = Math.sin(p*1.1 - i*0.7)*0.18;
+  }
+}
+
+/* ---- orkinos: açıkta dolaşır, yaklaşınca kaçar, ara sıra su yüzüne vurur ---- */
+function makeTuna(){
+  const G = new THREE.Group();
+  const back = mkMat(0x1d3f63, 0.3), side = mkMat(0x7f97ac, 0.25), belly = mkMat(0xe8eef2, 0.3);
+  const finM = mkMat(0xe8b23c, 0.4);
+  const body = lathe([[0.005,-0.62],[0.07,-0.45],[0.14,-0.2],[0.168,0.05],[0.15,0.3],[0.1,0.5],[0.045,0.64],[0.005,0.66]], side, 14);
+  body.rotation.x = Math.PI/2; G.add(body);
+  const dorsalTop = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 1.1), back);
+  dorsalTop.position.set(0, 0.116, 0.02); dorsalTop.scale.set(1, 1, 1); G.add(dorsalTop);
+  const bel = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.05, 0.9), belly);
+  bel.position.set(0, -0.122, 0.02); G.add(bel);
+  const d1 = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.2, 4), back);
+  d1.rotation.set(0, Math.PI/4, 0); d1.scale.set(0.5, 1, 1.6); d1.position.set(0, 0.2, 0.08); G.add(d1);
+  for(const sx of [-1, 1]){
+    const pec = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.26, 4), side);
+    pec.scale.set(0.4, 1, 1.2); pec.position.set(sx*0.12, -0.02, 0.1);
+    pec.rotation.set(0.2, 0, sx*1.25); G.add(pec);
+    for(let i = 0; i < 4; i++){
+      const f = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.03, 0.05), finM);
+      f.position.set(sx*0.07, 0.08, -0.26 - i*0.075); G.add(f);
+    }
+  }
+  const tailP = new THREE.Group(); tailP.position.z = -0.6; tailP.name = 'tfin'; G.add(tailP);
+  const stem = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.06, 0.12), side);
+  stem.position.z = -0.05; tailP.add(stem);
+  for(const sy of [-1, 1]){
+    const fl = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.3, 4), back);
+    fl.scale.set(0.28, 1, 1); fl.position.set(0, sy*0.14, -0.16);
+    fl.rotation.set(sy*0.9, 0, 0); tailP.add(fl);
+  }
+  for(const sx of [-1, 1]){
+    const ey = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 6), EYE_D);
+    ey.position.set(sx*0.085, 0.03, 0.47); G.add(ey);
+  }
+  G.traverse(o => { if(o.isMesh) o.castShadow = true; });
+  G.scale.setScalar(1);
+  G.userData = { tail:tailP, ph:rand()*6.28 };
+  return G;
+}
+
+
+
+/* Her sakin için ayrı geometri ve malzeme üretmek bellekte pahalıya
+   geliyordu. Sekiz kalıp kuruluyor, geri kalanlar kopyalanıyor --
+   three.js kopyası geometriyi ve malzemeyi paylaşır. Kopyadan sonra
+   hareket için gereken gruplar adlarından yeniden bulunuyor.           */
+function bindVillager(G){
+  const f = n => G.getObjectByName(n);
+  G.userData = { body:f('body'), hips:f('hips'), chest:f('chest'), head:f('head'),
+                 legs:[{ g:f('legL'), lo:f('legLlo') }, { g:f('legR'), lo:f('legRlo') }],
+                 arms:[{ g:f('armL'), lo:f('armLlo') }, { g:f('armR'), lo:f('armRlo') }],
+                 ph:rand()*6.28, spd:0 };
+  return G;
+}
+function bindBeast(G, tailUp){
+  const f = n => G.getObjectByName(n);
+  const tail = f('tail');
+  tail.userData = { s0:f('tseg0'), s1:f('tseg1'), s2:f('tseg2') };
+  G.userData = { spine:f('spine'), neck:f('neck'), head:f('head'), tail,
+                 ears:[f('earL'), f('earR')],
+                 legs:[{ g:f('legLF'), lo:f('legLFlo'), ph:0, front:true },
+                       { g:f('legRF'), lo:f('legRFlo'), ph:Math.PI, front:true },
+                       { g:f('legLB'), lo:f('legLBlo'), ph:Math.PI, front:false },
+                       { g:f('legRB'), lo:f('legRBlo'), ph:0, front:false }],
+                 ph:rand()*6.28, tailUp:!!tailUp };
+  return G;
+}
+
+/* bahçe sandalyesi -- sakinler bir yere otursun diye */
+function mkChair(col){
+  const g = new THREE.Group();
+  const m = mkMat(col, 0.88), m2 = mkMat(new THREE.Color(col).multiplyScalar(0.84).getHex(), 0.88);
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.05, 0.44), m);
+  seat.position.y = 0.42; g.add(seat);
+  const bk = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.44, 0.05), m2);
+  bk.position.set(0, 0.64, 0.2); bk.rotation.x = -0.12; g.add(bk);
+  for(const [sx, sz] of [[-1,-1],[1,-1],[-1,1],[1,1]]){
+    const l = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.42, 0.045), m2);
+    l.position.set(sx*0.19, 0.21, sz*0.18); g.add(l);
+  }
+  g.traverse(o => { if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+  return g;
+}
+
+/* ---- sakinleri, hayvanları ve balıkları yerleştir ---- */
+const VILL = [], PETS = [], TUNA = [];
+const SAY_V = {
+  garden:['Sıcak be, gölgeye geç.', 'Akşama balık alacağım.', 'Çay demledim, isteyen var mı?',
+          'Bu çocuklar yine koşuşturuyor.', 'Zeytinleri topladık bu sene.', 'Komşu, su kesilmiş mi?'],
+  stroll:['Günaydın!', 'Bugün hava bir harika.', 'Büfeye gidiyorum, bir şey ister misiniz?',
+          'Yavaş koşun, düşersiniz.', 'Akşam sahilde buluşuyoruz.', 'Ekmek aldım, taze.'],
+  beach :['Su bugün ılık.', 'Şemsiyeyi rüzgâr devirdi.', 'Dalgalar kabuk getirmiş.',
+          'Kremimi sürdüm, şimdi dalarım.', 'Çocuklar, denize açılmayın.'],
+  swim  :['Suya girin, buz gibi değil!', 'Dibe inince kabuk var.', 'Bir orkinos geçti, gördünüz mü?',
+          'Sırtüstü yüzmeyi öğrendim sonunda.'],
+};
+(() => {
+  const VC = [
+    { skin:0xe3b48c, top:0x5f8fb4, bot:0x3c4756, hair:0x33281e, hat:0xe8dcc0 },
+    { skin:0xd8a178, top:0xd96f5a, bot:0x5a4a3c, hair:0x241c16 },
+    { skin:0xf0c49c, top:0xe8c86a, bot:0x6a5f8c, hair:0x6b3f2a, dress:true },
+    { skin:0xc98a62, top:0x6fae8c, bot:0x3f4a52, hair:0x1f1a15, bare:true },
+    { skin:0xe8bd95, top:0xf2ece0, bot:0x47535e, scarf:0xd8c8a8, dress:true },
+    { skin:0xd6a378, top:0x8f7ab4, bot:0x34404d, hair:0x4a3524 },
+    { skin:0xecc3a0, top:0x4f7f9c, bot:0x7a6a54, scarf:0xe6a8a0, dress:true },
+    { skin:0xdcae84, top:0xd8d2c4, bot:0x5f6b4a, hair:0x2b2119, hat:0xb9a37c, bare:true },
+  ];
+  const TPL = VC.map(c => makeVillager(c));
+  const dry = (x, z) => terrainH(x, z) > 0.6 && !blocked(blockBld, x, z);
+  const add = (kind, x, z, i, extra) => {
+    const o = bindVillager(TPL[i % TPL.length].clone());
+    const v = Object.assign({ o, kind, x, z, y:terrainH(x, z), face:rand()*6.28, spd:0, live:false,
+                              id:VILL.length, t:rand()*5, hx:x, hz:z, say:rand()*40 + 10 }, extra || {});
+    VILL.push(v); return v;
+  };
+
+  /* 1) bahçesinde oturanlar — sandalye evin sokağa bakmayan tarafında */
+  const stepB = Math.max(1, Math.floor(buildingList.length/28));
+  let gi = 0;
+  for(let bi = 1; bi < buildingList.length; bi += stepB){
+    const b = buildingList[bi];
+    const R = Math.max(b.bw, b.bd)/2 + 2.6;
+    for(let a = 0; a < 10; a++){
+      const th = b.ang + a*0.628 + 0.3;
+      const x = b.cx + Math.cos(th)*R, z = b.cz + Math.sin(th)*R;
+      if(!dry(x, z) || blocked(blockRoad, x, z)) continue;
+      const ch = mkChair(gi % 2 ? 0xe4dac2 : 0x7fa8b8);
+      ch.position.set(x, groundAt(x, z), z);
+      ch.rotation.y = th + Math.PI/2;
+      add('garden', x, z, gi, { face:th + Math.PI/2, chair:ch });
+      gi++; break;
+    }
+  }
+  /* 2) sokakta gezenler */
+  const rp = [];
+  for(const r of W.roads) for(let k = 1; k < r.pts.length - 1; k += 2){
+    const x = px2x(r.pts[k][0]), z = pz2z(r.pts[k][1]);
+    if(terrainH(x, z) > 0.6 && !blocked(blockBld, x, z)) rp.push([x, z]);
+  }
+  for(let i = 0; i < 26 && rp.length > 4; i++){
+    const a = rp[Math.floor(rand()*rp.length)];
+    let b2 = null, bd2 = 0;
+    for(let k = 0; k < 30; k++){
+      const c = rp[Math.floor(rand()*rp.length)];
+      const d = (c[0]-a[0])**2 + (c[1]-a[1])**2;
+      if(d > bd2 && d < 90*90){ bd2 = d; b2 = c; }
+    }
+    if(!b2) continue;
+    add('stroll', a[0], a[1], i + 2, { ax:a[0], az:a[1], bx:b2[0], bz:b2[1], to:1 });
+  }
+  /* 3) kumsalda ve suda olanlar */
+  const beach = [], shallow = [];
+  for(let x = MINX + 20; x < MINX + WORLD_W - 20; x += 6)
+    for(let z = MINZ + 20; z < MINZ + WORLD_H - 20; z += 6){
+      const h = terrainH(x, z);
+      const ci = Math.min(GW-1, Math.max(0, Math.round((x - MINX)/GSTEP)));
+      const cj = Math.min(GH-1, Math.max(0, Math.round((z - MINZ)/GSTEP)));
+      if(h > 0.5 && h < 1.9 && sandCell[cj*GW + ci] === 1) beach.push([x, z]);
+      else if(h < -0.4 && h > -1.6) shallow.push([x, z]);
+    }
+  for(let i = 0; i < 10 && beach.length; i++){
+    const q = beach[Math.floor(rand()*beach.length)];
+    add('beach', q[0], q[1], i + 4, { sit:rand() < 0.5 });
+  }
+  for(let i = 0; i < 9 && shallow.length; i++){
+    const q = shallow[Math.floor(rand()*shallow.length)];
+    add('swim', q[0], q[1], i + 1, { ax:q[0], az:q[1] });
+  }
+
+  /* 4) sokak kedileri ve köpekleri */
+  const CATS = [{ fur:0x8c8375, dark:0x5e564b, pale:0xe0d8c8, k:0.62, snout:0.05, ear:'up', tailUp:true },
+                { fur:0x2f2a26, dark:0x201c19, pale:0xd8d2c6, k:0.6,  snout:0.05, ear:'up', tailUp:true },
+                { fur:0xd9a86a, dark:0xa87c48, pale:0xf0e4cc, k:0.63, snout:0.05, ear:'up', tailUp:true }];
+  const DOGS = [{ fur:0xc9a271, dark:0x8e6b45, pale:0xe8ddc6, k:0.92, snout:0.1, ear:'flop' },
+                { fur:0x6e645a, dark:0x4a433b, pale:0xd0c8ba, k:0.86, snout:0.11, ear:'flop' },
+                { fur:0xe0d6c2, dark:0xa89a84, pale:0xf2ece0, k:0.95, snout:0.09, ear:'flop' }];
+  const BT = [...CATS, ...DOGS].map(c => makeBeast(c));
+  const spots = rp.length ? rp : [[P.x, P.z]];
+  for(let i = 0; i < 24; i++){
+    const cat = i % 5 < 2;
+    const ti = cat ? (i % 3) : (3 + i % 3);
+    const cfg = [...CATS, ...DOGS][ti];
+    const q = spots[Math.floor(rand()*spots.length)];
+    const x = q[0] + (rand()-0.5)*12, z = q[1] + (rand()-0.5)*12;
+    if(!dry(x, z)) continue;
+    const o = bindBeast(BT[ti].clone(), cfg.tailUp);
+    PETS.push({ o, cat, k:cfg.k, name:cat ? 'Kedi' : 'Köpek', x, z, y:terrainH(x, z), live:false,
+                face:rand()*6.28, spd:0, state:'wander', t:rand()*4, hx:x, hz:z,
+                tx:x, tz:z, pet:0, follow:0 });
+  }
+
+  /* 5) orkinoslar — iki metreden derin suda */
+  const deep = [];
+  for(let x = MINX + 20; x < MINX + WORLD_W - 20; x += 9)
+    for(let z = MINZ + 20; z < MINZ + WORLD_H - 20; z += 9)
+      if(terrainH(x, z) < -2.2) deep.push([x, z]);
+  const TT = makeTuna();
+  for(let i = 0; i < 9 && deep.length; i++){
+    const q = deep[Math.floor(rand()*deep.length)];
+    const o = TT.clone(); o.userData = { tail:o.getObjectByName('tfin'), ph:rand()*6.28 };
+    const sc = 0.95 + rand()*0.7;
+    o.scale.setScalar(sc);
+    TUNA.push({ o, x:q[0], z:q[1], y:Math.max(terrainH(q[0], q[1]) + 0.8, -2.4), face:rand()*6.28, live:false,
+                spd:1, tx:q[0], tz:q[1], t:rand()*6, sc, jump:-20, seen:false });
+  }
+})();
+
+/* ---- Ayı Murat: kumsalda taş kaldıran, sesi gür, kalbi yumuşak ---- */
+const murat = makeAdult({ skin:0xc98656, top:0xf2ece0, bot:0x2f3a46, bulk:1, beard:true,
+                          hair:0x241b14, sleeve:false, shoe:0x4a3a2c, brow:0x241b14 });
+murat.scale.setScalar(1.14);
+const MURAT = { o:murat, name:'Ayı Murat', x:0, z:0, y:0, face:0, spd:0, live:false,
+                state:'idle', t:0, say:6, pose:0, cd:0, cheer:0 };
+(() => {
+  /* büfeye yakın kumsalda bir yer: oyuncu ganimet satmaya giderken görsün */
+  let best = null, bd2 = 1e9;
+  const sx = SPOTS[0] ? SPOTS[0].x : 150, sz = SPOTS[0] ? SPOTS[0].z : -37;
+  for(let x = MINX + 20; x < MINX + WORLD_W - 20; x += 5)
+    for(let z = MINZ + 20; z < MINZ + WORLD_H - 20; z += 5){
+      const h = terrainH(x, z);
+      if(h < 0.6 || h > 2.4 || blocked(blockBld, x, z) || blocked(blockRoad, x, z)) continue;
+      const d = (x - sx)**2 + (z - sz)**2;
+      if(d < bd2){ bd2 = d; best = [x, z]; }
+    }
+  if(best){ MURAT.x = MURAT.hx = best[0]; MURAT.z = MURAT.hz = best[1]; }
+  MURAT.y = groundAt(MURAT.x, MURAT.z);
+  /* kaldırdığı taş */
+  const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(0.33, 0), mkMat(0x8d8577, 1));
+  rock.scale.set(1.1, 0.86, 1); rock.castShadow = true;
+  rock.position.set(0, -0.1, -0.1);
+  murat.userData.armR.hand.add(rock);
+  murat.userData.rock = rock;
+})();
+
+
+/* ---------- uçan süpürge -------------------------------------------------
+   Sitenin üstünden geçebilmek oyunun en çok istenen şeyiydi. Süpürge bir
+   araç gibi davranıyor: yanına gidip Etkileş'e basınca binilir, yön çubuğu
+   yönü ve hızı, Zıpla yükselmeyi, Dal alçalmayı verir. İniş yine Etkileş.
+   Uçarken binalar çarpışmaya girmiyor, bunun yerine çatı kotunun üstünde
+   kalınıyor; bu yüzden binaların çatı yüksekliği ayrı bir ızgarada.     */
+const roofY = new Float32Array(BGW*BGH);
+
+function stampRoof(cx, cz, w, d, ang, pad, y){
+  const ca = Math.cos(ang), sa = Math.sin(ang);
+  const hw = w/2 + pad, hd = d/2 + pad;
+  const R = Math.hypot(hw, hd);
+  const i0 = Math.max(0, Math.floor((cx-R-MINX)/BG)), i1 = Math.min(BGW-1, Math.ceil((cx+R-MINX)/BG));
+  const j0 = Math.max(0, Math.floor((cz-R-MINZ)/BG)), j1 = Math.min(BGH-1, Math.ceil((cz+R-MINZ)/BG));
+  for(let j = j0; j <= j1; j++){
+    const pz = MINZ + (j + 0.5)*BG - cz;
+    for(let i = i0; i <= i1; i++){
+      const px = MINX + (i + 0.5)*BG - cx;
+      const u = px*ca + pz*sa, v = -px*sa + pz*ca;
+      if(Math.abs(u) <= hw && Math.abs(v) <= hd){
+        const k = j*BGW+i; if(y > roofY[k]) roofY[k] = y;
+      }
+    }
+  }
+}
+for(const r of bldRoof) stampRoof(r[0], r[1], r[2], r[3], r[4], 1.2, r[5]);
+const roofAt = (x, z) => {
+  const i = Math.floor((x-MINX)/BG), j = Math.floor((z-MINZ)/BG);
+  return i < 0 || j < 0 || i >= BGW || j >= BGH ? 0 : roofY[j*BGW+i];
+};
+
+function makeBroom(){
+  const G = new THREE.Group();
+  const wood = mkMat(0x8a5f36, 0.92), dark = mkMat(0x5e4024, 0.92);
+  const straw = mkMat(0xd9ad5c, 0.95), straw2 = mkMat(0xc0913f, 0.95);
+  const sap = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 1.72, 8), wood);
+  sap.rotation.x = Math.PI/2; sap.position.z = 0.1; G.add(sap);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.058, 10, 8), dark);
+  knob.position.z = 0.98; G.add(knob);
+  /* demet: koniler sapın arkasına doğru açılıyor */
+  for(let i = 0; i < 9; i++){
+    const a = i/9*6.283;
+    const c = new THREE.Mesh(new THREE.ConeGeometry(0.036, 0.52, 5), i % 2 ? straw : straw2);
+    c.position.set(Math.cos(a)*0.052, Math.sin(a)*0.052, -0.98);
+    c.rotation.set(Math.PI/2 + Math.sin(a)*0.1, Math.cos(a)*0.1, 0);
+    G.add(c);
+  }
+  const bind = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.072, 0.1, 10), dark);
+  bind.rotation.x = Math.PI/2; bind.position.z = -0.72; G.add(bind);
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.05, 0.4), mkMat(0x7a3f6a, 0.9));
+  seat.position.set(0, 0.05, -0.1); G.add(seat);
+  G.traverse(o => { if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+  return G;
+}
+const BROOMS = [];
+(() => {
+  /* üç süpürge: muhtarlık, büfe ve en yakın kumsal kenarı */
+  const want = [];
+  for(const sp of SPOTS) want.push([sp.x, sp.z]);
+  want.push([MURAT.x, MURAT.z]);
+  for(const w of want){
+    let put = null;
+    for(let r = 3; r < 16 && !put; r += 1.5)
+      for(let a = 0; a < 12; a++){
+        const th = a*0.523;
+        const x = w[0] + Math.cos(th)*r, z = w[1] + Math.sin(th)*r;
+        if(terrainH(x, z) > 0.6 && !blocked(blockBld, x, z) && !blocked(blockRoad, x, z)){ put = [x, z]; break; }
+      }
+    if(!put) continue;
+    const o = makeBroom();
+    const y = groundAt(put[0], put[1]);
+    o.position.set(put[0], y + 0.42, put[1]);
+    o.rotation.set(-0.95, rand()*6.283, 0);     /* bir yere yaslanmış duruyor */
+    scene.add(o);
+    BROOMS.push({ o, x:put[0], z:put[1], y, home:[put[0], y, put[1]], taken:false });
+  }
+})();
+
+/* uçuş durumu */
+const FLY = { on:false, broom:null, vx:0, vz:0, vy:0, bank:0, t:0, mateBroom:null };
+function mountBroom(b){
+  FLY.on = true; FLY.broom = b; b.taken = true;
+  FLY.vx = FLY.vz = FLY.vy = 0; FLY.t = 0;
+  P.swim = false; P.vy = 0;
+  if(!FLY.mateBroom){ FLY.mateBroom = makeBroom(); scene.add(FLY.mateBroom); }
+  FLY.mateBroom.visible = true;
+  addStat('ucus', 1);
+  feed('Süpürgeye bindin — Zıpla yüksel, Dal alçal', { icon:'jump', hold:4200 });
+  say(GS.who, 'Tutun Alya, kalkıyoruz!', 3);
+  checkQuests();
+}
+function dismountBroom(){
+  if(!FLY.on) return;
+  if(typeof resetTour === 'function') resetTour();
+  const b = FLY.broom;
+  FLY.on = false; FLY.broom = null;
+  if(FLY.mateBroom) FLY.mateBroom.visible = false;
+  if(b){
+    b.taken = false;
+    b.x = P.x; b.z = P.z; b.y = groundAt(P.x, P.z);
+    b.o.position.set(b.x, b.y + 0.42, b.z);
+    b.o.rotation.set(-0.95, P.face, 0);
+  }
+  P.y = Math.max(P.y, groundAt(P.x, P.z));
+  P.vy = 0;
+}
+
 /* fırlatılanlar */
 const SHOTS = [];
 const stoneMat = mkMat(0x8d8577, 1);
@@ -4329,6 +4950,12 @@ const QUESTS = [
   { id:'q5', t:'El fenerini satın al', r:0, f:() => GS.gear.fener },
   { id:'q6', t:'Gece 3 çakalı siteden kovala', r:60, f:() => GS.stat.chased >= 3 },
   { id:'q7', t:'Edibe ya da Sadık’tan bir kez kaç', r:25, f:() => GS.stat.escaped >= 1 },
+  { id:'q8', t:'Bir sokak kedisini ya da köpeğini sev', r:15, f:() => (GS.stat.sevdi || 0) >= 1 },
+  { id:'q9', t:'Açıkta orkinos gör', r:35, f:() => (GS.stat.orkinos || 0) >= 1 },
+  { id:'q10', t:'Süpürgeye binip sitenin üstünden geç', r:40, f:() => (GS.stat.ucus || 0) >= 1 },
+  { id:'q11', t:'Potaya taş atıp üç sayı yap', r:45, f:() => (GS.stat.pota || 0) >= 3 },
+  { id:'q12', t:'Ayı Murat ile tanış', r:20, f:() => (GS.stat.murat || 0) >= 1 },
+  { id:'q13', t:'Süpürge turundaki altı halkadan geç', r:60, f:() => (GS.stat.tur || 0) >= 1 },
 ];
 const done = {};
 function paintQuests(fresh){
@@ -4544,11 +5171,43 @@ function loseLoot(n){
 }
 
 /* ---------- taş atma ---------- */
+/* Potaya atarken düz fırlatış işe yaramıyor: taş 22 m/s ile çemberin
+   bir metre üstünden geçip gidiyor. Sahanın yakınında ve pota kabaca
+   karşıdaysa atış kendiliğinden kavise dönüyor -- çocuk taşı fırlatmıyor,
+   havaya yaylandırıyor. Nişan ne kadar şaşarsa taş o kadar sapıyor, yani
+   isabet yine oyuncunun işi.                                            */
+function aimHoop(){
+  if(!HOOPS.length) return null;
+  const fx = -Math.sin(camYaw), fz = -Math.cos(camYaw);
+  let best = null, bestDot = 0.82;
+  for(const h of HOOPS){
+    const dx = h.x - P.x, dz = h.z - P.z;
+    const d = Math.hypot(dx, dz);
+    if(d > 15 || d < 1.5) continue;
+    const dot = (dx/d)*fx + (dz/d)*fz;
+    if(dot > bestDot){ bestDot = dot; best = { h, d, dot }; }
+  }
+  return best;
+}
 function throwStone(){
   if(GS.stones <= 0){ toast('Taş kalmadı — kıyıdan çakıl topla', 'bad'); return; }
   GS.stones--;
   const hand = KIDS[GS.who].userData.armR.hand;
   const from = new THREE.Vector3(); hand.getWorldPosition(from);
+  const aim = aimHoop();
+  if(aim){
+    const T = 0.95;
+    const sap = (1 - aim.dot)*7.0 + 0.045;            /* nişan şaşarsa sapma */
+    const tx = aim.h.x + (rand()-0.5)*sap*aim.d*0.5;
+    const tz = aim.h.z + (rand()-0.5)*sap*aim.d*0.5;
+    const v = new THREE.Vector3((tx - from.x)/T, 0, (tz - from.z)/T);
+    v.y = (aim.h.y + 0.5 - from.y)/T + 0.5*19*T;
+    const sp = v.length();
+    spawnShot('stone', from, v.multiplyScalar(1/sp), sp);
+    KIDS[GS.who].userData.throwT = 0.42;
+    refreshHUD();
+    return;
+  }
   const dir = new THREE.Vector3(-Math.sin(camYaw), 0, -Math.cos(camYaw));
   dir.y = 0.34 - camPitch*0.5; dir.normalize();
   spawnShot('stone', from, dir, 22*PERK[GS.who].stone);
@@ -4905,8 +5564,34 @@ tPois.addEventListener('click', () => { showPois = !showPois; tPois.setAttribute
 
 /* ---------- etkileşim ---------- */
 let nearSpot = null, nearShore = false;
+const SAY_PET = { kedi:['Mırrr…', 'Miyav!', 'Boynunu uzattı.'],
+                  kopek:['Hav!', 'Kuyruğunu deli gibi salladı.', 'Eline burnunu sürdü.'] };
 function interact(){
   if(!UI.modal.hidden){ closeModal(); return; }
+  if(FLY.on){ dismountBroom(); toast('Süpürgeden indin'); return; }
+  if(nearBroom){ mountBroom(nearBroom); return; }
+  if(nearLife){
+    const L = nearLife;
+    if(L.cat !== undefined){
+      /* hayvan: sevdikten sonra bir süre peşinden gelir */
+      L.pet = 5; L.follow = 22;
+      sayAt(L, pick(SAY_PET[L.cat ? 'kedi' : 'kopek']));
+      addStat('sevdi', 1);
+      toast((L.cat ? 'Kediyi' : 'Köpeği') + ' sevdin — peşinden geliyor', 'good');
+      buzz(16); checkQuests();
+    } else if(L === MURAT){
+      MURAT.cheer = 2.2; MURAT.say = 12;
+      if(!GS.stat.murat){ addStat('murat', 1); toast('Ayı Murat ile tanıştın', 'good'); checkQuests(); }
+      sayAt(MURAT, pick(['Kolumu tut bakayım — yok, sen büyüyünce.',
+                         'Ganimet topluyormuşsunuz. Sağlam iş.',
+                         'Akşam çakal gelirse beni çağırın.',
+                         'Taşı böyle kaldıracaksın, belden değil.']));
+    } else {
+      sayAt(L, pick(SAY_V[L.kind] || SAY_V.stroll));
+      addStat('selam', 1); checkQuests();
+    }
+    return;
+  }
   if(nearSpot){
     if(nearSpot.kind === 'shop') openModal('shop');
     else if(nearSpot.kind === 'junk') openModal('junk');
@@ -5104,7 +5789,7 @@ const buzz = ms => { try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e)
 
   /* ekrana dokununca da, Zıpla tuşuna basınca da aynı hareket */
   function jump(){
-    if(P.swim){ IN.jump = true; setTimeout(() => { IN.jump = false; }, 200); }
+    if(FLY.on || P.swim){ IN.jump = true; setTimeout(() => { IN.jump = false; }, 200); }
     else if(P.onGround) P.vy = 5.4;
   }
 
@@ -5129,7 +5814,8 @@ const buzz = ms => { try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e)
 function paintTouchButtons(){
   if(!document.body.classList.contains('touch')) return;
   const e = $('tb-e');
-  e.classList.toggle('hot', !!nearSpot || (nearShore && GS.stones < GS.maxStones));
+  e.classList.toggle('hot', !!nearSpot || !!nearLife || !!nearBroom || FLY.on ||
+                            (nearShore && GS.stones < GS.maxStones));
   $('tb-torch').classList.toggle('lock', !GS.gear.fener);
   $('tb-torch').classList.toggle('on', GS.gear.fener && GS.tool === 'fener');
   $('tb-stone').classList.toggle('lock', GS.stones === 0);
@@ -5429,6 +6115,46 @@ function lootNear(dt, t){
   } else halo.visible = spark.visible = false;
 }
 
+
+/* Süpürge uçuşu: yer çekimi yok, hız yumuşak, yükseliş ve alçalış
+   tuşlara bağlı. Binalara çarpmak yerine çatı kotunun üstünde kalınıyor;
+   tavan 86 metre, dünyanın dışına çıkılmıyor.                           */
+function updateFly(dt, ix, iz, amt, run){
+  FLY.t += dt;
+  const fwdx = -Math.sin(camYaw), fwdz = -Math.cos(camYaw);
+  const rx = Math.cos(camYaw), rz = -Math.sin(camYaw);
+  let dx = fwdx*iz + rx*ix, dz = fwdz*iz + rz*ix;
+  const dl = Math.hypot(dx, dz);
+  const top = run ? 18.5 : 11;
+  if(dl > 0.001){
+    dx /= dl; dz /= dl;
+    FLY.vx = lp(FLY.vx, dx*top*amt, dt*1.7);
+    FLY.vz = lp(FLY.vz, dz*top*amt, dt*1.7);
+    const wantF = Math.atan2(-dx, -dz);
+    let diff = ((wantF - P.face + Math.PI*3) % (Math.PI*2)) - Math.PI;
+    P.face += diff*Math.min(1, dt*3.0);
+    FLY.bank = lp(FLY.bank, Math.max(-0.55, Math.min(0.55, -diff*1.2)), dt*3);
+  } else {
+    FLY.vx = lp(FLY.vx, 0, dt*1.0);
+    FLY.vz = lp(FLY.vz, 0, dt*1.0);
+    FLY.bank = lp(FLY.bank, 0, dt*3);
+  }
+  P.x = Math.max(MINX + 4, Math.min(MINX + WORLD_W - 4, P.x + FLY.vx*dt));
+  P.z = Math.max(MINZ + 4, Math.min(MINZ + WORLD_H - 4, P.z + FLY.vz*dt));
+  const up = (keys.has('Space') || IN.jump) ? 1 : 0;
+  const dn = (keys.has('KeyC') || keys.has('ControlLeft') || IN.dive) ? 1 : 0;
+  FLY.vy = lp(FLY.vy, (up - dn)*7.0, dt*3.0);
+  P.y += FLY.vy*dt;
+  const floor = Math.max(groundAt(P.x, P.z), roofAt(P.x, P.z), 0) + 1.5;
+  if(P.y < floor){ P.y = floor; if(FLY.vy < 0) FLY.vy = 0; }
+  if(P.y > 86){ P.y = 86; FLY.vy = Math.min(0, FLY.vy); }
+  P.spd = Math.min(1, Math.hypot(FLY.vx, FLY.vz)/top);
+  P.onGround = false; P.swim = false; P.dive = false; GS.under = false;
+  GS.breath = Math.min(1, GS.breath + dt/4);
+  GS.stamina = Math.min(1, GS.stamina + dt*0.2);
+  if(P.y > 24) addStat('yukseklik', 0);
+}
+
 /* ---------- oyuncu ---------- */
 function updatePlayer(dt, t){
   const kid = KIDS[GS.who], other = KIDS[GS.who === 'ali' ? 'alya' : 'ali'];
@@ -5446,6 +6172,8 @@ function updatePlayer(dt, t){
   if(L > 1){ ix /= L; iz /= L; }
   const amt = GS.stun > 0 ? 0 : Math.min(1, L);
 
+  if(FLY.on){ updateFly(dt, ix, iz, amt, run); }
+  else {
   const ground = groundAt(P.x, P.z);
   const wet = ground < -0.85;                     // 85 cm'den derinse yüzülür, daha sığı yürünür
   if(!wet) P.swim = false;
@@ -5505,11 +6233,23 @@ function updatePlayer(dt, t){
     P.y += P.vy*dt;
     if(P.y <= ground){ P.y = ground; P.vy = 0; P.onGround = true; } else P.onGround = false;
   }
+  }
 
-  kid.position.set(P.x, P.y, P.z);
-  kid.rotation.y = P.face;
-  animKid(kid, { spd:P.spd, swim:P.swim, dive:P.dive, air:!P.onGround && !P.swim,
-                 stun:GS.stun, torch:GS.tool === 'fener' && GS.gear.fener }, dt);
+  if(FLY.on){
+    /* süpürge oyuncunun yerinde, çocuk yan oturuyor -- klasik duruş */
+    const b = FLY.broom;
+    if(b){
+      b.o.position.set(P.x, P.y, P.z);
+      b.o.rotation.set(-FLY.vy*0.045, P.face, FLY.bank);
+    }
+    kid.position.set(P.x, P.y - 0.46, P.z);
+    kid.rotation.y = P.face + Math.PI/2;
+  } else {
+    kid.position.set(P.x, P.y, P.z);
+    kid.rotation.y = P.face;
+  }
+  animKid(kid, { spd:P.spd, swim:P.swim, dive:P.dive, air:!P.onGround && !P.swim && !FLY.on,
+                 fly:FLY.on, stun:GS.stun, torch:GS.tool === 'fener' && GS.gear.fener }, dt);
   /* Çanta yalnız aktif karaktere ve yalnız File çanta alınınca
      takılıyordu; oyuncu çoğu zaman çantasız dolaşıyordu. Omuz çantası
      baştan duruyor, File çanta yükseltmesi sırt çantasını ekliyor.     */
@@ -5519,7 +6259,7 @@ function updatePlayer(dt, t){
   }
 
   /* arkadaş takip */
-  const want = 3.0;
+  const want = FLY.on ? 3.4 : 3.0;
   const ddx = P.x - MATE.x, ddz = P.z - MATE.z;
   const dm = Math.hypot(ddx, ddz);
   const mg = terrainH(MATE.x, MATE.z);
@@ -5531,11 +6271,12 @@ function updatePlayer(dt, t){
     let diff = ((wf - MATE.face + Math.PI*3) % (Math.PI*2)) - Math.PI;
     MATE.face += diff*Math.min(1, dt*9);
   } else MATE.spd = Math.max(0, MATE.spd - dt*2);
-  MATE.swim = terrainH(MATE.x, MATE.z) < -0.15;
-  MATE.y = MATE.swim ? Math.max(terrainH(MATE.x, MATE.z) + 0.45, -0.42) : groundAt(MATE.x, MATE.z);
-  other.position.set(MATE.x, MATE.y, MATE.z);
-  other.rotation.y = MATE.face;
-  animKid(other, { spd:MATE.spd, swim:MATE.swim, dive:false, air:false, stun:0, torch:false }, dt);
+  MATE.swim = !FLY.on && terrainH(MATE.x, MATE.z) < -0.15;
+  if(FLY.on) MATE.y = lp(MATE.y, P.y, dt*2.2);
+  else MATE.y = MATE.swim ? Math.max(terrainH(MATE.x, MATE.z) + 0.45, -0.42) : groundAt(MATE.x, MATE.z);
+  other.position.set(MATE.x, MATE.y - (FLY.on ? 0.46 : 0), MATE.z);
+  other.rotation.y = MATE.face + (FLY.on ? Math.PI/2 : 0);
+  animKid(other, { spd:MATE.spd, swim:MATE.swim, dive:false, air:false, stun:0, torch:false, fly:FLY.on }, dt);
 
   MATE.say -= dt;
   if(MATE.say <= 0 && rand() < 0.004){
@@ -5686,13 +6427,251 @@ function updateNPC(dt, t){
   }
 }
 
+
+/* ---------- sakinler, hayvanlar, balıklar, Ayı Murat ---------------------
+   Hepsi tek geçişte güncelleniyor; LIFE_R dışındakiler hem gizleniyor hem
+   de hesaplanmıyor.                                                      */
+let nearLife = null, nearBroom = null;    /* etkileşime en yakın canlı / süpürge */
+const _lifeSay = { t:0 };
+function updateLife(dt, t){
+  nearLife = null; nearBroom = null;
+  let bestD = 3.4*3.4;
+  if(!FLY.on) for(const b of BROOMS){
+    if(b.taken) continue;
+    const d2 = (b.x - P.x)**2 + (b.z - P.z)**2;
+    if(d2 < 9 && (!nearBroom || d2 < (nearBroom.x - P.x)**2 + (nearBroom.z - P.z)**2)) nearBroom = b;
+  }
+  /* arkadaş da süpürgeyle geliyor */
+  if(FLY.on && FLY.mateBroom){
+    FLY.mateBroom.position.set(MATE.x, MATE.y, MATE.z);
+    FLY.mateBroom.rotation.set(0, MATE.face, 0);
+  }
+
+  for(const v of VILL){
+    const dx = P.x - v.x, dz = P.z - v.z;
+    const d2 = dx*dx + dz*dz;
+    /* Uzaktakiler sahneden tamamen çıkıyor: görünmez bırakılsalar bile
+       her karede dünya matrisleri hesaplanırdı. Gece bahçeler, kumsal ve
+       deniz boşalıyor, sokakta yalnız birkaç kişi kalıyor.              */
+    const geceVar = !GS.night || (v.kind === 'stroll' && (v.id % 4) === 0);
+    const live = geceVar && d2 <= LIFE_R*LIFE_R;
+    if(live !== v.live){
+      v.live = live;
+      if(live){ scene.add(v.o); if(v.chair) scene.add(v.chair); }
+      else { scene.remove(v.o); if(v.chair) scene.remove(v.chair); }
+    }
+    if(!live) continue;
+    let sp = 0, sit = false, swim = false, busy = false;
+    if(v.kind === 'garden'){
+      sit = true;
+    }else if(v.kind === 'beach'){
+      if(v.sit) sit = true;
+      else {
+        v.t -= dt;
+        if(v.t <= 0){ v.t = 4 + rand()*6; v.face = rand()*6.28; }
+        busy = true;
+      }
+    }else if(v.kind === 'swim'){
+      swim = true;
+      v.t -= dt;
+      if(v.t <= 0){ v.t = 5 + rand()*5; v.face = rand()*6.28; }
+      const nx = v.x - Math.sin(v.face)*0.55*dt, nz = v.z - Math.cos(v.face)*0.55*dt;
+      if(terrainH(nx, nz) < -0.35 && terrainH(nx, nz) > -2.2){ v.x = nx; v.z = nz; }
+      else v.face += 2.1;
+    }else{
+      /* sokakta gezen: iki uç arasında gider gelir, oyuncuya selam verir */
+      const tx = v.to ? v.bx : v.ax, tz = v.to ? v.bz : v.az;
+      const ddx = tx - v.x, ddz = tz - v.z, dd = Math.hypot(ddx, ddz);
+      if(dd < 1.6){ v.to = !v.to; v.t = 1 + rand()*2; }
+      if(v.t > 0){ v.t -= dt; }
+      else {
+        sp = 1.25;
+        slide(v, ddx/dd*sp*dt, ddz/dd*sp*dt);
+        v.face = Math.atan2(-ddx/dd, -ddz/dd);
+      }
+    }
+    v.y = v.kind === 'swim' ? -0.52 : groundAt(v.x, v.z);
+    v.o.position.set(v.x, v.y, v.z);
+    v.o.rotation.y = v.face;
+    animVillager(v.o, { spd:sp, sit, swim, busy,
+                        look:d2 < 400 ? Math.max(-0.8, Math.min(0.8, Math.atan2(-dx, -dz) - v.face)) : 0 }, dt);
+    /* yakındayken ara sıra laf eder */
+    v.say -= dt;
+    if(v.say <= 0 && d2 < 150){
+      v.say = 16 + rand()*26;
+      sayAt(v, pick(SAY_V[v.kind] || SAY_V.stroll));
+    }
+    if(d2 < bestD){ bestD = d2; nearLife = v; }
+  }
+
+  for(const b of PETS){
+    const dx = P.x - b.x, dz = P.z - b.z;
+    const d2 = dx*dx + dz*dz;
+    const live = d2 <= LIFE_R*LIFE_R;
+    if(live !== b.live){ b.live = live; if(live) scene.add(b.o); else scene.remove(b.o); }
+    if(!live) continue;
+    const d = Math.sqrt(d2) || 1;
+    b.pet = Math.max(0, b.pet - dt);
+    b.follow = Math.max(0, b.follow - dt);
+    let sp = 0;
+    if(b.follow > 0 && d > 2.2){
+      b.state = 'walk';
+      sp = Math.min(3.4, 1.4 + d*0.3);
+      slide(b, dx/d*sp*dt, dz/d*sp*dt);
+      b.face = Math.atan2(-dx/d, -dz/d);
+    }else if(b.cat && d < 3.2 && b.pet <= 0 && b.follow <= 0){
+      /* kedi ürkek: yaklaşınca birkaç adım uzaklaşır */
+      b.state = 'flee'; sp = 2.6;
+      slide(b, -dx/d*sp*dt, -dz/d*sp*dt);
+      b.face = Math.atan2(dx/d, dz/d);
+    }else{
+      b.t -= dt;
+      if(b.t <= 0){
+        b.t = 3 + rand()*5;
+        b.state = rand() < 0.4 ? 'sit' : 'walk';
+        b.tx = b.hx + (rand()-0.5)*16; b.tz = b.hz + (rand()-0.5)*16;
+      }
+      if(b.state === 'walk'){
+        const tdx = b.tx - b.x, tdz = b.tz - b.z, td = Math.hypot(tdx, tdz);
+        if(td > 0.8){ sp = 1.1; slide(b, tdx/td*sp*dt, tdz/td*sp*dt); b.face = Math.atan2(-tdx/td, -tdz/td); }
+      }
+    }
+    b.y = groundAt(b.x, b.z);
+    b.o.position.set(b.x, b.y, b.z);
+    b.o.rotation.y = b.face;
+    animBeast(b, sp/2.2, dt, t);
+    if(d2 < bestD){ bestD = d2; nearLife = b; }
+  }
+
+  /* orkinoslar: derinde geniş daireler çizer, oyuncu yaklaşınca savrulur */
+  for(const f of TUNA){
+    const dx = P.x - f.x, dz = P.z - f.z;
+    const d2 = dx*dx + dz*dz;
+    const live = d2 <= 150*150;
+    if(live !== f.live){ f.live = live; if(live) scene.add(f.o); else scene.remove(f.o); }
+    if(!live) continue;
+    const d = Math.sqrt(d2) || 1;
+    f.t -= dt;
+    if(f.t <= 0){
+      f.t = 4 + rand()*6;
+      for(let k = 0; k < 14; k++){
+        const a = rand()*6.283, r = 14 + rand()*34;
+        const nx = f.x + Math.cos(a)*r, nz = f.z + Math.sin(a)*r;
+        if(terrainH(nx, nz) < -2.0){ f.tx = nx; f.tz = nz; break; }
+      }
+    }
+    let sp = 2.6;
+    let gx = f.tx - f.x, gz = f.tz - f.z;
+    if(d < 16){                                   /* kaç */
+      gx = -dx; gz = -dz; sp = 7.4;
+      if(!f.seen && d < 26){ f.seen = true; onTunaSeen(); }
+    }
+    const gd = Math.hypot(gx, gz) || 1;
+    f.x += gx/gd*sp*dt; f.z += gz/gd*sp*dt;
+    const want = Math.atan2(-gx/gd, -gz/gd);
+    let diff = ((want - f.face + Math.PI*3) % (Math.PI*2)) - Math.PI;
+    f.face += diff*Math.min(1, dt*2.4);
+    const bed = terrainH(f.x, f.z);
+    const hedef = Math.min(-1.0, bed + 1.4 + Math.sin(t*0.5 + f.sc*3)*0.5);
+    f.y = lp(f.y, hedef, dt*1.2);
+    /* ara sıra su yüzüne vurur: karadan da görünen bir sıçrama */
+    f.jump -= dt;
+    if(f.jump < -16 && rand() < 0.004 && d < 90){ f.jump = 1.25; }
+    if(f.jump > 0){
+      const u = 1 - f.jump/1.25;
+      f.y = -1.2 + Math.sin(u*Math.PI)*2.6;
+      f.o.rotation.z = Math.sin(u*Math.PI)*0.4;
+    } else f.o.rotation.z = lp(f.o.rotation.z, 0, dt*3);
+    f.o.position.set(f.x, f.y, f.z);
+    f.o.rotation.y = f.face;
+    f.o.rotation.x = lp(f.o.rotation.x, f.jump > 0 ? -0.5 : 0, dt*3);
+    const u2 = f.o.userData;
+    u2.ph += dt*(5 + sp*1.4);
+    u2.tail.rotation.y = Math.sin(u2.ph)*0.52;
+    f.o.children[0].rotation.z = Math.sin(u2.ph - 0.8)*0.07;
+  }
+
+  /* ---- Ayı Murat ---- */
+  const mdx = P.x - MURAT.x, mdz = P.z - MURAT.z;
+  const md = Math.hypot(mdx, mdz) || 1;
+  if(md < LIFE_R){
+    if(!MURAT.live){ MURAT.live = true; scene.add(MURAT.o); }
+    MURAT.t -= dt; MURAT.cd -= dt; MURAT.cheer = Math.max(0, MURAT.cheer - dt);
+    let sp = 0;
+    if(MURAT.state === 'walk'){
+      const tdx = MURAT.tx - MURAT.x, tdz = MURAT.tz - MURAT.z, td = Math.hypot(tdx, tdz);
+      if(td > 1.0){ sp = 1.6; slide(MURAT, tdx/td*sp*dt, tdz/td*sp*dt); MURAT.face = Math.atan2(-tdx/td, -tdz/td); }
+      else MURAT.state = 'idle';
+      if(MURAT.t <= 0) MURAT.state = 'idle';
+    } else {
+      /* taş kaldırır, arada oyuncuya döner */
+      if(md < 14){
+        const want = Math.atan2(-mdx/md, -mdz/md);
+        let diff = ((want - MURAT.face + Math.PI*3) % (Math.PI*2)) - Math.PI;
+        MURAT.face += diff*Math.min(1, dt*2.2);
+      }
+      if(MURAT.t <= 0){
+        MURAT.t = 7 + rand()*8;
+        if(rand() < 0.4){
+          MURAT.state = 'walk';
+          MURAT.tx = MURAT.hx + (rand()-0.5)*14; MURAT.tz = MURAT.hz + (rand()-0.5)*14;
+        }
+      }
+    }
+    MURAT.pose += dt*(MURAT.state === 'idle' ? 1.5 : 0);
+    MURAT.y = groundAt(MURAT.x, MURAT.z);
+    MURAT.o.position.set(MURAT.x, MURAT.y, MURAT.z);
+    MURAT.o.rotation.y = MURAT.face;
+    animAdult(MURAT.o, sp/3, dt, 0);
+    /* halter hareketi: sağ kol dirsekten kıvrılır */
+    const u3 = MURAT.o.userData;
+    if(MURAT.state === 'idle'){
+      const k = (Math.sin(MURAT.pose) + 1)/2;
+      u3.armR.g.rotation.x = lp(u3.armR.g.rotation.x, -0.35, dt*6);
+      u3.armR.lo.rotation.x = lp(u3.armR.lo.rotation.x, -0.35 - k*1.6, dt*7);
+      u3.armL.g.rotation.x = lp(u3.armL.g.rotation.x, -0.2, dt*6);
+      u3.armL.lo.rotation.x = lp(u3.armL.lo.rotation.x, -0.9, dt*6);
+      u3.chest.rotation.x = lp(u3.chest.rotation.x, -0.06 - k*0.05, dt*5);
+    }
+    if(u3.rock) u3.rock.visible = MURAT.state === 'idle';
+    MURAT.say -= dt;
+    if(MURAT.say <= 0 && md < 22){
+      MURAT.say = 14 + rand()*16;
+      sayAt(MURAT, pick(['Bir, iki… bu taş da benden ağır değil.',
+                         'Kahvaltıda on yumurta, çocuklar.',
+                         'Sadık bana bağırmaya korkar, bilirim.',
+                         'Denize gireceksen önce ısın.',
+                         'Çakal görürseniz bana haber verin.']));
+    }
+    if(md*md < bestD){ bestD = md*md; nearLife = MURAT; }
+  } else if(MURAT.live){ MURAT.live = false; scene.remove(MURAT.o); }
+}
+/* canlıların üstünde konuşma balonu — oyuncununkiyle aynı havuzdan */
+const lifeBubble = bubbleFor(() => _bubTarget);
+let _bubTarget = new THREE.Vector3(0, -999, 0);
+function sayAt(who, text){
+  lifeBubble.el.textContent = text;
+  lifeBubble.until = clock.elapsedTime + 3.0;
+  _bubTarget = new THREE.Vector3(who.x, (who.y || 0) + (who === MURAT ? 2.3 : (who.cat !== undefined ? 0.9 : 2.0)), who.z);
+}
+let tunaSeen = false;
+function onTunaSeen(){
+  if(tunaSeen) return;
+  tunaSeen = true;
+  addStat('orkinos', 1);
+  feed('Orkinos! Açıkta bir sürü geçiyor', { icon:'dive', hold:4200 });
+  checkQuests();
+}
+
 /* ---------- fırlatılanlar ---------- */
 function updateShots(dt){
   for(let i = SHOTS.length - 1; i >= 0; i--){
     const s = SHOTS[i];
     s.t += dt;
+    const prevY = s.m.position.y;
     s.v.y -= 19*dt;
     s.m.position.addScaledVector(s.v, dt);
+    if(s.kind === 'stone' && HOOPS.length) checkBasket(s, prevY);
     s.m.rotation.x += dt*8; s.m.rotation.z += dt*5;
     const g = terrainH(s.m.position.x, s.m.position.z);
     let gone = false;
@@ -5719,6 +6698,104 @@ function updateShots(dt){
   }
 }
 
+
+/* ---------- oyunlar: pota ve süpürge turu -------------------------------
+   Sitede yapılacak bir şey yoktu. İkisi de zaten var olan şeylerin
+   üstüne kuruldu: taş atmak ve uçmak.                                   */
+const HOOPS = [];
+scene.updateMatrixWorld(true);
+scene.traverse(o => {
+  if(o.name === 'pota'){
+    const v = new THREE.Vector3();
+    o.getWorldPosition(v);
+    HOOPS.push(v);
+  }
+});
+const BASKET = { n:0, best:0 };
+function checkBasket(shot, prevY){
+  for(const h of HOOPS){
+    const dx = shot.m.position.x - h.x, dz = shot.m.position.z - h.z;
+    if(dx*dx + dz*dz > 0.16) continue;                   /* çemberin içi, biraz cömert */
+    if(prevY > h.y && shot.m.position.y <= h.y){
+      BASKET.n++;
+      addStat('pota', 1);
+      GS.money += 12;
+      feed('Sayı! Potadan geçti · ₺12', { icon:'coin', hold:3200 });
+      buzz(24); refreshHUD(); checkQuests();
+      return true;
+    }
+  }
+  return false;
+}
+
+/* --- süpürge turu: havadaki halkalardan sırayla geç --- */
+const RINGS = [];
+const TOUR = { i:0, t:0, running:false, best:0 };
+(() => {
+  const ringMat = toon({ color:0x3ad0c4, emissive:0x1a7f78, emissiveIntensity:1.1, roughness:0.4 });
+  const glowMat = new THREE.MeshBasicMaterial({ color:0xf4e08a, transparent:true, opacity:0.22,
+                                                blending:THREE.AdditiveBlending, depthWrite:false });
+  /* rota: muhtarlıktan büfeye doğru, yükselip alçalan bir hat */
+  const a = SPOTS[2] || { x:P.x, z:P.z }, b = SPOTS[0] || { x:P.x + 80, z:P.z - 80 };
+  for(let i = 0; i < 6; i++){
+    const u = (i + 0.6)/6.2;
+    const x = a.x + (b.x - a.x)*u + Math.sin(u*7)*26;
+    const z = a.z + (b.z - a.z)*u + Math.cos(u*5)*22;
+    const base = Math.max(groundAt(x, z), roofAt(x, z), 0);
+    const y = base + 12 + Math.sin(u*3.1)*7;
+    const o = new THREE.Group();
+    const r = new THREE.Mesh(new THREE.TorusGeometry(3.3, 0.3, 8, 26), ringMat);
+    o.add(r);
+    const gl = new THREE.Mesh(new THREE.TorusGeometry(3.3, 0.72, 6, 20), glowMat);
+    o.add(gl);
+    o.position.set(x, y, z);
+    o.rotation.y = Math.atan2(b.x - a.x, b.z - a.z) + Math.PI/2;
+    o.visible = false;
+    scene.add(o);
+    RINGS.push({ o, x, y, z, done:false, mat:r.material, glow:gl });
+  }
+})();
+function resetTour(){
+  TOUR.i = 0; TOUR.t = 0; TOUR.running = false;
+  for(const r of RINGS){ r.done = false; r.o.scale.setScalar(1); }
+}
+function updateTour(dt){
+  const show = FLY.on;
+  for(let i = 0; i < RINGS.length; i++){
+    const r = RINGS[i];
+    r.o.visible = show;
+    if(!show) continue;
+    const next = i === TOUR.i;
+    r.glow.material.opacity = r.done ? 0.07 : (next ? 0.22 + Math.sin(clock.elapsedTime*3)*0.12 : 0.10);
+    r.o.rotation.z += dt*(next ? 0.5 : 0.12);
+    r.o.scale.setScalar(r.done ? 0.82 : 1);
+  }
+  if(!show) return;
+  if(TOUR.running) TOUR.t += dt;
+  const r = RINGS[TOUR.i];
+  if(!r) return;
+  const d = Math.hypot(P.x - r.x, P.z - r.z, P.y - r.y);
+  if(d < 3.4){
+    r.done = true;
+    if(!TOUR.running){ TOUR.running = true; TOUR.t = 0; }
+    TOUR.i++;
+    buzz(14);
+    if(TOUR.i >= RINGS.length){
+      const sn = TOUR.t.toFixed(1);
+      const ilk = !TOUR.best || TOUR.t < TOUR.best;
+      if(ilk) TOUR.best = TOUR.t;
+      GS.money += 45;
+      addStat('tur', 1);
+      feed('Süpürge turu bitti · ' + sn + ' sn' + (ilk ? ' · yeni rekor' : '') + ' · ₺45',
+           { icon:'coin', hold:4600 });
+      refreshHUD(); checkQuests();
+      setTimeout(resetTour, 2200);
+    } else {
+      feed('Halka ' + TOUR.i + '/' + RINGS.length, { icon:'jump', hold:1500 });
+    }
+  }
+}
+
 /* ---------- animasyon ---------- */
 function animate(){
   requestAnimationFrame(animate);
@@ -5739,6 +6816,8 @@ function animate(){
   updatePlayer(dt, t);
   updateJackals(dt, t);
   updateNPC(dt, t);
+  updateLife(dt, t);
+  updateTour(dt);
   updateShots(dt);
   lootNear(dt, t);
   /* Kenar erimesi adım adım büyüsün diye altı metre yerine bir
@@ -5894,9 +6973,13 @@ function animate(){
   }
   nearShore = !nearSpot && !P.swim && shoreCell(P.x, P.z);
   const wantPrompt = mode === 'play' && UI.modal.hidden && started &&
-                     (nearSpot || (nearShore && GS.stones < GS.maxStones));
+                     (FLY.on || nearBroom || nearLife || nearSpot || (nearShore && GS.stones < GS.maxStones));
   if(wantPrompt){
-    const txt = nearSpot ? [nearSpot.name, nearSpot.hint]
+    const txt = FLY.on ? ['İn', 'Süpürgeyi bırak']
+              : nearBroom ? ['Süpürgeye bin', 'Zıpla yüksel · Dal alçal']
+              : nearLife ? (nearLife.cat !== undefined ? [nearLife.name, 'sev']
+                                                       : [nearLife === MURAT ? 'Ayı Murat' : 'Komşu', 'selam ver'])
+              : nearSpot ? [nearSpot.name, nearSpot.hint]
                          : ['Çakıl taşı topla', GS.stones + '/' + GS.maxStones + ' cepte'];
     if(UI.prompt.dataset.k !== txt[0]){
       UI.prompt.dataset.k = txt[0];
@@ -6160,6 +7243,8 @@ setTimeout(() => {
 }, 420);
 
 window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS, IN,
+                       VILL, PETS, TUNA, MURAT, BROOMS, FLY, mountBroom, dismountBroom,
+                       HOOPS, RINGS, TOUR, BASKET,
                        setTime, setMode, flyTo, toast, interact, throwStone, toggleTorch, switchKid,
                        scene, camera, renderer, THREE, setFx, fx:() => fxOn, cam:() => ({ camYaw, camPitch, camDist }),
                        post:() => ({ composer, stylize, bloom, applyGrade, toonMats, RAMP, RAMP_SOFT, RAMP_HARD, hemi, sun }),
@@ -6174,7 +7259,7 @@ window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS,
    önbelleğe hiç uğramadan soruyor; kendi numarasıyla uyuşmuyorsa bütün
    önbellekleri ve servis çalışanlarını silip bir kez yeniden yükleniyor.
    Döngüye girmesin diye tek seferlik bir işaret bırakıyor.               */
-const BUILD = '19.10.2026 14:44';
+const BUILD = '19.10.2026 15:17';
 /* Başlık ekranındaki damga elle yazılıyordu ve geride kalabiliyordu;
    artık yapı numarasının kendisinden yazılıyor.                          */
 { const el = document.getElementById('build'); if(el) el.textContent = 'sürüm ' + BUILD; }

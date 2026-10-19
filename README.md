@@ -29,9 +29,18 @@ Oyun yalnızca dokunmatik oynanır; arayüzde klavye tuşu geçmez.
   deniz tabanı kum / deniz çayırı / kayalık olarak sınıflandırıldı
 - 9 çeşit ganimet (kabuk, salyangoz, mineralli taş, parlak mineral, deniz camı ve
   delik otel terliği gibi dört "çöp ganimet"), çanta, para, iki satış noktası, 6 geliştirme
-- 7 görev, yüzme ve dalış, nefes ve dayanıklılık
+- 13 görev, yüzme ve dalış, nefes ve dayanıklılık
 - Gece modunda çakallar: fener ışığı ve taş kaçırır, çakı yaklaştırmaz, muhtar ödül verir
 - Edibe terlik savurur, Sadık soda şişesi fırlatır; yiyince çantadan ganimet düşer
+- **Ayı Murat:** kumsalda taş kaldıran, gür sesli, kalbi yumuşak kabadayı
+- **Site sakinleri:** bahçesinde oturanlar, sokakta gezenler, kumsalda ve suda olanlar —
+  yetmiş kişi; yanlarına gidip selam verilir. Gece bahçeler ve kumsal boşalır
+- **Sokak hayvanları:** yirmi bir kedi ve köpek; sevilince peşinizden gelirler,
+  kediler ürkektir
+- **Orkinos:** açıkta dolaşan sürü; yaklaşınca savrulur, ara sıra su yüzüne vurur
+- **Uçan süpürge:** binip sitenin üstünden geçilir; havadaki altı halkadan
+  sırayla geçmek süreli bir tur oyunu
+- **Pota:** sahanın yakınında taş atışı kendiliğinden kavise döner, çember sayar
 
 ## Teknik
 
