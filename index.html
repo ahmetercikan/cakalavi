@@ -2721,6 +2721,66 @@ const KID = {
   thigh:0.36, shin:0.33, upperArm:0.25, foreArm:0.23, headY:0.375, headR:0.107,
 };
 
+/* --- iki kemikli uzuv derisi -------------------------------------------
+   Eskiden kolun üst ve alt parçası ayrı birer katı gövdeydi: dirsek ya da
+   diz büküldüğünde iki parça birbirinin içine giriyor, eklem yerinde
+   geometri kırılıyordu — tahta bebek görüntüsünün asıl sebebi buydu.
+   Artık omuzdan bileğe tek bir deri var ve bu deri iki kemiğe bağlı;
+   eklemin iki yanındaki halkalar ağırlığı paylaştığı için büküm yumuşak,
+   dirsekte kumaş gibi kıvrılıyor.                                       */
+const skinGeoCache = new Map();
+function limbGeo(rTop, rMid, rBot, lenUp, lenLo){
+  const key = [rTop, rMid, rBot, lenUp, lenLo].map(v => v.toFixed(3)).join(':');
+  const hit = skinGeoCache.get(key);
+  if(hit) return hit;
+  const L = lenUp + lenLo, SEG = 14, RINGS = 30;
+  const capT = rTop*0.9, capB = rBot*0.9;
+  const sm = x => x*x*(3 - 2*x);
+  /* yarıçap: uçlarda küre kapak, arada omuz → eklem → bilek geçişi */
+  const rAt = t => {
+    if(t < capT){ const a = 1 - t/capT; return rTop*Math.sqrt(Math.max(0, 1 - a*a)); }
+    if(t > L - capB){ const a = (t - (L - capB))/capB; return rBot*Math.sqrt(Math.max(0, 1 - a*a)); }
+    const span = L - capT - capB, u = (t - capT)/span, jp = (lenUp - capT)/span;
+    return u < jp ? rTop + (rMid - rTop)*sm(u/jp) : rMid + (rBot - rMid)*sm((u - jp)/(1 - jp));
+  };
+  /* eklemin iki yanında bu kadarlık bir şeritte ağırlık paylaşılıyor */
+  const band = Math.min(0.055, lenUp*0.38, lenLo*0.38);
+  const pos = [], idx = [], si = [], sw = [];
+  for(let i = 0; i <= RINGS; i++){
+    const t = i/RINGS*L, r = Math.max(0.0008, rAt(t));
+    const wLo = sm(Math.max(0, Math.min(1, (t - (lenUp - band))/(2*band))));
+    for(let j = 0; j <= SEG; j++){
+      const a = j/SEG*Math.PI*2;
+      pos.push(Math.cos(a)*r, -t, Math.sin(a)*r);
+      si.push(0, 1, 0, 0);
+      sw.push(1 - wLo, wLo, 0, 0);
+    }
+  }
+  for(let i = 0; i < RINGS; i++){
+    for(let j = 0; j < SEG; j++){
+      const a = i*(SEG + 1) + j, b = a + SEG + 1;
+      idx.push(a, a + 1, b, a + 1, b + 1, b);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
+  g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  skinGeoCache.set(key, g);
+  return g;
+}
+function limbSkin(rTop, rMid, rBot, lenUp, lenLo, mat){
+  const up = new THREE.Bone(), lo = new THREE.Bone();
+  lo.position.y = -lenUp; up.add(lo);
+  const mesh = new THREE.SkinnedMesh(limbGeo(rTop, rMid, rBot, lenUp, lenLo), mat);
+  mesh.add(up);
+  mesh.bind(new THREE.Skeleton([up, lo]));
+  mesh.frustumCulled = false;      /* büküldükçe sınır kutusu kayar */
+  return { mesh, up, lo };
+}
+
 function makeKid(cfg){
   const G = new THREE.Group();
   const skin = skinMat(cfg.skin), shirt = mkMat(cfg.shirt, 0.92), shortM = mkMat(cfg.short, 0.92);
@@ -2818,25 +2878,24 @@ function makeKid(cfg){
 
   /* --- kollar --- */
   const arm = s => {
-    const g = new THREE.Group(); g.position.set(s*KID.shoulderX, KID.shoulderY, 0); chest.add(g);
+    const root = new THREE.Group(); root.position.set(s*KID.shoulderX, KID.shoulderY, 0); chest.add(root);
+    const L = limbSkin(0.0385, 0.0325, 0.0245, KID.upperArm, KID.foreArm, skin);
+    root.add(L.mesh);
     /* tişört kolu: omuzdan aşağı hafif açılan kumaş, üstü yuvarlak kapalı */
     const slv = lathe([[0.002,0.052],[0.028,0.06],[0.042,0.042],[0.046,-0.01],[0.047,-0.075],
                        [0.044,-0.125],[0.002,-0.128]], sleeveM, 16);
-    slv.scale.z = 0.94; g.add(slv);
-    g.add(bone(0.0385, 0.031, KID.upperArm, skin));
-    const lo = new THREE.Group(); lo.position.y = -KID.upperArm; g.add(lo);
-    lo.add(bone(0.0315, 0.0245, KID.foreArm, skin));
-    const hand = makeHand(skin, s); hand.position.y = -KID.foreArm - 0.004; lo.add(hand);
-    return { g, lo, hand };
+    slv.scale.z = 0.94; L.up.add(slv);
+    const hand = makeHand(skin, s); hand.position.y = -KID.foreArm - 0.004; L.lo.add(hand);
+    return { g: L.up, lo: L.lo, hand };
   };
   /* --- bacaklar: uyluk başı şortun içinde kalır --- */
   const leg = s => {
-    const g = new THREE.Group(); g.position.set(s*0.066, -0.04, 0); hips.add(g);
+    const root = new THREE.Group(); root.position.set(s*0.066, -0.04, 0); hips.add(root);
+    const L = limbSkin(0.05, 0.0385, 0.027, KID.thigh, KID.shin, skin);
+    root.add(L.mesh);
+    const g = L.up, lo = L.lo;
     const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.066, 0.13, 16), shortM);
     cuff.position.y = -0.055; cuff.scale.z = 0.95; g.add(cuff);
-    g.add(bone(0.05, 0.04, KID.thigh, skin));
-    const lo = new THREE.Group(); lo.position.y = -KID.thigh; g.add(lo);
-    lo.add(bone(0.039, 0.027, KID.shin, skin));
     const foot = new THREE.Group(); foot.position.y = -KID.shin; lo.add(foot);
     /* spor ayakkabı: taban, burun kapağı, bilek yakası, bağcık */
     const shoeM = mkMat(cfg.shoe || 0xf2efe6, 0.78), soleM = mkMat(cfg.sole || 0xe2ded3, 0.95);
