@@ -52,6 +52,24 @@ Oyun yalnızca dokunmatik oynanır; arayüzde klavye tuşu geçmez.
   sırayla geçmek süreli bir tur oyunu
 - **Pota:** sahanın yakınında taş atışı kendiliğinden kavise döner, çember sayar
 
+## Görsel katman
+
+Sahne duruyordu: otlar kıpırdamıyor, gökyüzü boş, zemin tek bir aydınlıktaydı.
+Üçü de tek bir rüzgâr saatine bağlandı.
+
+- **Rüzgâr:** ot, çalı ve ağaçlar köşe gölgelendiricisinde salınıyor. Her bitki
+  kendi dünya konumundan türeyen bir fazla hareket ediyor, tabanı sabit kalıyor;
+  esinti kendi içinde kabarıp iniyor, tek düze bir sallanma yok
+- **Bulutlar:** gökyüzü kubbesinde, döşenebilir bir gürültü dokusundan okunan
+  keskin kenarlı lekeler. Günün saatine göre renk ve yoğunluk değişiyor
+- **Bulut gölgeleri:** aynı doku yerde de kayıyor; arazi ve yollar bulut
+  geçerken kararıyor
+- **Martılar** gündüz koyun üstünde süzülüyor, **ateşböcekleri** gece
+  karakterin çevresinde yanıp sönüyor — ikisi de tek çizim çağrısı
+
+Ölçüm: en zayıf kalite kademesinde (tier 0) dururken 59,7 · koşarken 59,6 ·
+gece 60,3 kare/sn.
+
 ## Ses
 
 Oyunun bütün sesi tarayıcıda, Web Audio ile yerinde üretiliyor — tek bir

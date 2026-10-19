@@ -1253,18 +1253,135 @@ function rimLight(m, k){
   m.customProgramCacheKey = () => 'rim' + k.toFixed(2);
 }
 
+
+/* ---------- rüzgâr ve bulutlar ------------------------------------------
+   Sahne duruyordu: otlar kıpırdamıyor, gökyüzü boştu, zemin tek bir
+   düzlükte aynı aydınlıkta kalıyordu. Üçü de tek bir rüzgâr saatine
+   bağlandı; ot ve ağaçlar aynı esintiyle salınıyor, bulutlar aynı yöne
+   sürükleniyor, gölgeleri de yerde onlarla birlikte geçiyor.            */
+const WIND = { t:{ value:0 }, k:{ value:1 }, dir:{ value:new THREE.Vector2(1, 0.42) } };
+/* Esneyen malzeme: köşeler kendi dünya konumundan türeyen bir fazla
+   salınıyor, taban sabit kalıyor. Mevcut onBeforeCompile'ın üstüne
+   ekleniyor ki kenar ışığı bozulmasın.                                  */
+function windify(m, amt, base){
+  const prev = m.onBeforeCompile;
+  const b = (base || 0).toFixed(2), a = amt.toFixed(4), a2 = (amt*0.62).toFixed(4);
+  m.onBeforeCompile = sh => {
+    if(prev) prev(sh);
+    sh.uniforms.wT = WIND.t;
+    sh.uniforms.wK = WIND.k;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float wT;\nuniform float wK;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        {
+          #ifdef USE_INSTANCING
+            vec3 wo = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+          #else
+            vec3 wo = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+          #endif
+          float hgt = max(0.0, transformed.y - ${b});
+          float ph = wo.x*0.23 + wo.z*0.19;
+          float g = sin(wT*1.9 + ph)*0.66 + sin(wT*0.73 + ph*0.41)*0.34;
+          transformed.x += g*hgt*${a}*wK;
+          transformed.z += cos(wT*1.45 + ph*1.17)*hgt*${a2}*wK;
+        }`);
+  };
+  const old = m.customProgramCacheKey ? m.customProgramCacheKey() : '';
+  m.customProgramCacheKey = () => old + '|w' + a + '_' + b;
+  m.needsUpdate = true;
+  return m;
+}
+
+/* Döşenebilir bulut dokusu: hem gökyüzü hem de yerdeki gölgeler aynı
+   dokuyu okuyor, böylece ikisi aynı bulutlardan geliyormuş gibi duruyor
+   ve piksel başına gürültü hesaplanmıyor.                               */
+const cloudTex = (() => {
+  const N = 256, d = new Uint8Array(N*N);
+  const lat = (step, seed) => {
+    const g = new Float32Array(step*step);
+    for(let i = 0; i < g.length; i++) g[i] = ((Math.sin(i*12.9898 + seed)*43758.5453) % 1 + 1) % 1;
+    return g;
+  };
+  const oct = [[4, 1.7], [8, 5.3], [16, 11.1], [32, 23.7]];
+  const w = [0.46, 0.27, 0.17, 0.10];
+  const grids = oct.map(o => lat(o[0], o[1]));
+  const sm = t => t*t*(3 - 2*t);
+  for(let y = 0; y < N; y++) for(let x = 0; x < N; x++){
+    let v = 0;
+    for(let o = 0; o < oct.length; o++){
+      const st = oct[o][0], g = grids[o];
+      const fx = x/N*st, fy = y/N*st;
+      const i0 = Math.floor(fx), j0 = Math.floor(fy);
+      const tx = sm(fx - i0), ty = sm(fy - j0);
+      const i1 = (i0 + 1) % st, j1 = (j0 + 1) % st;
+      const a = g[(j0 % st)*st + (i0 % st)], b2 = g[(j0 % st)*st + i1];
+      const c = g[j1*st + (i0 % st)], e = g[j1*st + i1];
+      v += w[o]*((a + (b2 - a)*tx) + ((c + (e - c)*tx) - (a + (b2 - a)*tx))*ty);
+    }
+    d[y*N + x] = Math.max(0, Math.min(255, Math.round(v*255)));
+  }
+  const t = new THREE.DataTexture(d, N, N, THREE.RedFormat);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.minFilter = t.magFilter = THREE.LinearFilter;
+  t.needsUpdate = true;
+  return t;
+})();
+const CLOUD = { tex:{ value:cloudTex }, t:{ value:0 }, amt:{ value:0.5 },
+                lit:{ value:new THREE.Color(0xfbf4e4) }, dark:{ value:new THREE.Color(0xb9cad8) },
+                shade:{ value:0.26 } };
+/* Yerdeki bulut gölgesi: gökyüzüyle aynı dokudan, aynı hızda kayıyor. */
+function cloudShade(m){
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = sh => {
+    if(prev) prev(sh);
+    sh.uniforms.cTex = CLOUD.tex;
+    sh.uniforms.cT = CLOUD.t;
+    sh.uniforms.cS = CLOUD.shade;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWPosC;')
+      .replace('#include <project_vertex>', 'vWPosC = (modelMatrix * vec4(transformed, 1.0)).xyz;\n#include <project_vertex>');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>',
+        '#include <common>\nvarying vec3 vWPosC;\nuniform sampler2D cTex;\nuniform float cT;\nuniform float cS;')
+      .replace('#include <opaque_fragment>',
+        '{ vec2 cuv = vWPosC.xz*0.0062 + vec2(cT*0.030, cT*0.0126);\n' +
+        '  float cn = clamp((texture2D(cTex, cuv).r - 0.5)*2.1 + 0.5, 0.0, 1.0);\n' +
+        '  float sh2 = smoothstep(0.48, 0.66, cn)*cS;\n' +
+        '  outgoingLight *= 1.0 - sh2; }\n' +
+        '#include <opaque_fragment>');
+  };
+  const old = m.customProgramCacheKey ? m.customProgramCacheKey() : '';
+  m.customProgramCacheKey = () => old + '|cs';
+  m.needsUpdate = true;
+  return m;
+}
+
 const skyMat = new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite:false,
   uniforms:{ top:{value:new THREE.Color(0x2f7fb8)}, bot:{value:new THREE.Color(0xd9ecf5)},
-             sunDir:{value:new THREE.Vector3(0,1,0)}, sunCol:{value:new THREE.Color(0xfff0cf)} },
+             sunDir:{value:new THREE.Vector3(0,1,0)}, sunCol:{value:new THREE.Color(0xfff0cf)},
+             cTex:CLOUD.tex, cT:CLOUD.t, cAmt:CLOUD.amt, cLit:CLOUD.lit, cDark:CLOUD.dark },
   vertexShader:`varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
   fragmentShader:`
-    uniform vec3 top,bot,sunCol; uniform vec3 sunDir; varying vec3 vP;
+    uniform vec3 top,bot,sunCol,cLit,cDark; uniform vec3 sunDir; varying vec3 vP;
+    uniform sampler2D cTex; uniform float cT, cAmt;
     void main(){
       float h = clamp(vP.y*.5+.5, 0., 1.);
       vec3 c = mix(bot, top, pow(smoothstep(.46,1.,h), .85));
       float d = max(dot(normalize(vP), normalize(sunDir)), 0.);
       c += sunCol * (pow(d, 220.)*1.5 + pow(d, 14.)*.22);
+      /* bulutlar: küreyi yatay düzleme izdüşürüp aynı dokudan okunuyor,
+         kenarları keskin -- çizgi filmde bulut da düz lekedir            */
+      float dy = max(vP.y, 0.0);
+      if(dy > 0.012 && cAmt > 0.01){
+        vec2 cuv = vP.xz/(dy + 0.22)*0.42 + vec2(cT*0.0065, cT*0.0027);
+        float n = texture2D(cTex, cuv).r;
+        n = clamp((n - 0.5)*2.1 + 0.5, 0.0, 1.0);
+        float edge = smoothstep(0.46, 0.60, n);
+        float lit = smoothstep(0.55, 0.86, n);
+        float mask = smoothstep(0.02, 0.17, dy)*cAmt;
+        c = mix(c, mix(cDark, cLit, lit), edge*mask);
+      }
       gl_FragColor = vec4(c, 1.);
     }`
 });
@@ -1332,7 +1449,7 @@ function grainTexture(size, scale, lo, hi, dots){
   return t;
 }
 const grainTex = grainTexture(256, 1, 0.78, 1.0, 900);
-const terrainMat = toon({ vertexColors:true, map:grainTex, ramp:RAMP_SOFT, rim:0.0 });
+const terrainMat = cloudShade(toon({ vertexColors:true, map:grainTex, ramp:RAMP_SOFT, rim:0.0 }));
 function terrainChunk(i0, j0, i1, j1, mat){
   const pos = [], col = [], idx = [], uv = [];
   const w = i1 - i0 + 1;
@@ -1752,8 +1869,8 @@ for(const r of W.roads){
   }
 }
 const paveTex = grainTexture(256, 1, 0.82, 1.0, 1400);
-const roadMat = toon({ vertexColors:true, map:paveTex, ramp:RAMP_SOFT, rim:0.0,
-                                                 envMapIntensity:0.22, side:THREE.DoubleSide });
+const roadMat = cloudShade(toon({ vertexColors:true, map:paveTex, ramp:RAMP_SOFT, rim:0.0,
+                                                 envMapIntensity:0.22, side:THREE.DoubleSide }));
 const kerbMat = toon({ vertexColors:true, map:paveTex, ramp:RAMP_SOFT, rim:0.12,
                                                  envMapIntensity:0.2, side:THREE.DoubleSide });
 scene.add(meshFrom(kP, kC, kI, kerbMat, false, 1.0));
@@ -2087,7 +2204,7 @@ const palmGeo = (() => {
   return mergeSimple(parts, cols);
 })();
 
-const treeMat = toon({ vertexColors:true, rim:0.34 });
+const treeMat = windify(toon({ vertexColors:true, rim:0.34 }), 0.022, 1.2);
 const CHUNK = 130;
 /* Ağaçlar iki ayrıntı kademesinde duruyor: yakındakiler hazır model (çam
    1.646, yayvan 3.182 üçgen), uzaktakiler eski ucuz geometri. Öbek boyu
@@ -5368,14 +5485,14 @@ const TUFT_N = Math.round(400*SCAT), PEB_N = Math.round(360*SCAT);
    kendi sayısı yapıyor: aynı kare her zaman aynı kararı alıyor.         */
 const PEB_FRAC = 0.45;
 const tufts = new THREE.InstancedMesh(tuftGeo,
-  toon({ vertexColors:true, roughness:0.95, side:THREE.DoubleSide }), TUFT_N);
+  windify(toon({ vertexColors:true, roughness:0.95, side:THREE.DoubleSide }), 0.105, 0), TUFT_N);
 /* model çakıllarda vertex rengi yok; renk örnek bazında veriliyor */
 const pebs = new THREE.InstancedMesh(pebGeo,
   toon({ vertexColors:!PROP.pebble.length, flatShading:!PROP.pebble.length }), PEB_N);
 /* maki çalısı: tutam yerine seyrek serpilen hacimli bir model */
 const BUSH_N = PROP.bush ? Math.round(24*SCAT) : 0;
 const bushes = BUSH_N ? new THREE.InstancedMesh(PROP.bush,
-  toon({ vertexColors:true, rim:0.3 }), BUSH_N) : null;
+  windify(toon({ vertexColors:true, rim:0.3 }), 0.048, 0.08), BUSH_N) : null;
 if(bushes){
   bushes.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   bushes.castShadow = true; bushes.receiveShadow = true;
@@ -5756,13 +5873,17 @@ function sayNPC(i, text){
 /* ---------- günün saati ---------- */
 const TIMES = {
   morning:{ dir:[-0.75, 0.42, 0.52], sun:0xffd9a8, hemiSky:0xcfe6ff, hemiGnd:0x7b6f52, int:2.5,
-            top:0x3f86b4, bot:0xf2dcc4, fog:0xdcd3c4, fogD:0.0017, deep:0x0c466a, shal:0x52c9c4, sky:0xbcd9e8, exp:1.0 },
+            top:0x3f86b4, bot:0xf2dcc4, fog:0xdcd3c4, fogD:0.0017, deep:0x0c466a, shal:0x52c9c4, sky:0xbcd9e8, exp:1.0,
+            cLit:0xfff0d8, cDark:0xcdbcc6, cAmt:0.58, cShade:0.24 },
   noon:   { dir:[0.42, 0.95, 0.32], sun:0xfff4e0, hemiSky:0xbfe4ff, hemiGnd:0x7a6f52, int:3.1,
-            top:0x2f7fb8, bot:0xd9ecf5, fog:0xbfdcea, fogD:0.0013, deep:0x0a4269, shal:0x49cbbe, sky:0x9fd3ea, exp:1.02 },
+            top:0x2f7fb8, bot:0xd9ecf5, fog:0xbfdcea, fogD:0.0013, deep:0x0a4269, shal:0x49cbbe, sky:0x9fd3ea, exp:1.02,
+            cLit:0xfdfaf2, cDark:0xb6c9da, cAmt:0.46, cShade:0.27 },
   dusk:   { dir:[0.88, 0.22, -0.42], sun:0xffb073, hemiSky:0xf0b9a0, hemiGnd:0x55483a, int:2.2,
-            top:0x24486e, bot:0xf2a877, fog:0xe2b08c, fogD:0.0019, deep:0x12365a, shal:0x3fa9b0, sky:0xf0c4a0, exp:1.1 },
+            top:0x24486e, bot:0xf2a877, fog:0xe2b08c, fogD:0.0019, deep:0x12365a, shal:0x3fa9b0, sky:0xf0c4a0, exp:1.1,
+            cLit:0xffd7aa, cDark:0xa8748c, cAmt:0.66, cShade:0.22 },
   night:  { dir:[-0.35, 0.55, -0.3], sun:0xa8bedc, hemiSky:0x33496a, hemiGnd:0x1d242c, int:0.62,
-            top:0x070f1c, bot:0x16283c, fog:0x0c1726, fogD:0.0026, deep:0x030c18, shal:0x10465a, sky:0x16283c, exp:1.18 },
+            top:0x070f1c, bot:0x16283c, fog:0x0c1726, fogD:0.0026, deep:0x030c18, shal:0x10465a, sky:0x16283c, exp:1.18,
+            cLit:0x3d5272, cDark:0x16202f, cAmt:0.5, cShade:0.1 },
 };
 let timeKey = 'noon';
 function setTime(k){
@@ -5779,6 +5900,8 @@ function setTime(k){
   skyMat.uniforms.bot.value.setHex(t.bot);
   skyMat.uniforms.sunDir.value.copy(d);
   skyMat.uniforms.sunCol.value.setHex(k === 'night' ? 0xcdd8ea : t.sun);
+  CLOUD.lit.value.setHex(t.cLit); CLOUD.dark.value.setHex(t.cDark);
+  CLOUD.amt.value = t.cAmt; CLOUD.shade.value = t.cShade;
   fog.color.setHex(t.fog); fog.density = t.fogD*Q.fogK;
   waterUni.uSun.value.copy(d);
   waterUni.uDeep.value.setHex(t.deep);
@@ -6208,8 +6331,15 @@ const shoreCell = (x, z) => {
 function hitPlayer(kind){
   if(GS.stun > 0) return;
   sfx('hit');
-  GS.stun = kind === 'slipper' ? 1.25 : 0.95;
+  GS.stun = kind === 'slipper' ? 0.7 : 0.55;
   addStat('hit', 1);
+  /* vuruş geri itiyor: üst üste binmiş hâlde kalmıyorsun */
+  if(hitPlayer.from){
+    const dx = P.x - hitPlayer.from[0], dz = P.z - hitPlayer.from[1];
+    const d = Math.hypot(dx, dz) || 1;
+    slide(P, dx/d*1.15, dz/d*1.15);
+    hitPlayer.from = null;
+  }
   const lost = loseLoot(kind === 'slipper' ? 2 : 1);
   toast(kind === 'slipper' ? `Edibe terliği patlattı! ${lost} ganimet düştü` : `Sadık’ın soda şişesi değdi! ${lost} ganimet düştü`, 'bad');
   UI.flash.classList.add('on');
@@ -6305,7 +6435,10 @@ function updatePlayer(dt, t){
   const run = (keys.has('ShiftLeft') || keys.has('ShiftRight') || IN.run) && GS.stamina > 0.05;
   const L = Math.hypot(ix, iz);
   if(L > 1){ ix /= L; iz /= L; }
-  const amt = GS.stun > 0 ? 0 : Math.min(1, L);
+  /* Sersemleyince hareket tamamen kesiliyordu: Edibe 1,4 saniyede bir
+     vuruyor, sersemlik 1,25 saniye sürüyordu -- aradaki 0,15 saniyede
+     kaçmak mümkün değildi. Artık sersemlik yavaşlatıyor, durdurmuyor.  */
+  const amt = Math.min(1, L)*(GS.stun > 0 ? 0.45 : 1);
 
   if(FLY.on){ updateFly(dt, ix, iz, amt, run); }
   else {
@@ -6518,6 +6651,7 @@ function updateNPC(dt, t){
     const dx = P.x - n.x, dz = P.z - n.z;
     const d = Math.hypot(dx, dz) || 1;
     n.cd -= dt; n.swing = Math.max(0, n.swing - dt);
+    if(n.back === undefined) n.back = 0;
     let sp = 0;
 
     if(!awake){
@@ -6536,10 +6670,25 @@ function updateNPC(dt, t){
     } else if(n.state === 'chase'){
       n.chaseT += dt;
       sp = n.run;
-      slide(n, dx/d*sp*dt, dz/d*sp*dt);
+      /* Karakterlerin içine giriyorlardı: artık bir kol boyu mesafede
+         duruyorlar, daha yakınsa geri itiliyorlar. Vurduktan sonra da
+         kısa bir süre geri çekiliyorlar ki kaçacak boşluk kalsın.      */
+      if(n.back > 0){
+        n.back -= dt;
+        slide(n, -dx/d*2.6*dt, -dz/d*2.6*dt);
+        sp = 2.6;
+      } else if(d > 1.35){
+        slide(n, dx/d*sp*dt, dz/d*sp*dt);
+      } else if(d < 1.1){
+        slide(n, -dx/d*1.8*dt, -dz/d*1.8*dt);
+        sp = 0.5;
+      } else sp = 0.4;
       n.face = Math.atan2(-dx/d, -dz/d);
       if(i === 0){
-        if(d < 2.2 && n.cd <= 0){ n.cd = 1.4; n.swing = 0.45; hitPlayer('slipper'); }
+        if(d < 2.2 && n.cd <= 0){
+          n.cd = 2.8; n.swing = 0.45; n.back = 0.55;
+          hitPlayer.from = [n.x, n.z]; hitPlayer('slipper');
+        }
         else if(d > 6 && d < 22 && n.cd <= 0){
           n.cd = 5.0; n.swing = 0.4;
           const from = new THREE.Vector3(); n.o.userData.armR.hand.getWorldPosition(from);
@@ -6554,7 +6703,10 @@ function updateNPC(dt, t){
           const dir = new THREE.Vector3(dx/d, 0.32, dz/d).normalize();
           spawnShot('bottle', from, dir, Math.min(28, 12 + d*0.6));
           sayNPC(i, 'Soda şişesi geliyor!');
-        } else if(d < 2.0 && n.cd <= 0){ n.cd = 1.6; n.swing = 0.4; hitPlayer('bottle'); }
+        } else if(d < 2.0 && n.cd <= 0){
+          n.cd = 2.6; n.swing = 0.4; n.back = 0.5;
+          hitPlayer.from = [n.x, n.z]; hitPlayer('bottle');
+        }
       }
       if(d > 72 || P.swim || !awake || Math.hypot(n.x - n.hx, n.z - n.hz) > 120){
         if(n.chaseT > 2.2){
@@ -6838,7 +6990,10 @@ function updateShots(dt){
       }
     } else if(GS.stun <= 0){
       const d = Math.hypot(s.m.position.x - P.x, s.m.position.z - P.z);
-      if(d < 1.2 && Math.abs(s.m.position.y - (P.y + 0.9)) < 1.3){ hitPlayer(s.kind); gone = true; }
+      if(d < 1.2 && Math.abs(s.m.position.y - (P.y + 0.9)) < 1.3){
+        hitPlayer.from = [s.m.position.x - s.v.x*0.2, s.m.position.z - s.v.z*0.2];
+        hitPlayer(s.kind); gone = true;
+      }
     }
     if(s.m.position.y < g - 0.2 || s.t > 6) gone = true;
     if(gone){
@@ -7187,6 +7342,107 @@ function musicOn(v){
   }
 }
 
+
+/* ---------- martılar ve ateşböcekleri ------------------------------------
+   Gökyüzü ve gece boştu. İkisi de tek üçgen yığınıyla çiziliyor: martılar
+   tek bir geometride, kanat çırpışı köşe gölgelendiricide; ateşböcekleri
+   katkılı noktalar. Toplam maliyet iki çizim çağrısı.                   */
+const GULLS = (() => {
+  const N = 7;
+  const pos = [], idx = [], att = [];
+  for(let i = 0; i < N; i++){
+    /* her martı: iki kanat üçgeni, gövde için ince bir üçgen */
+    const o = i*5;
+    pos.push(0,0,0,  -1.0,0,-0.35,  -0.55,0,0.5,
+             0,0,0,   1.0,0,-0.35,   0.55,0,0.5);
+    for(let k = 0; k < 6; k++){ att.push(i, k < 3 ? -1 : 1, k % 3); }
+    for(let k = 0; k < 6; k++) idx.push(i*6 + k);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('aBird', new THREE.Float32BufferAttribute(att, 3));
+  g.setIndex(idx);
+  const uni = { uT:{ value:0 }, uCol:{ value:new THREE.Color(0xf6f1e4) }, uOn:{ value:1 } };
+  const m = new THREE.ShaderMaterial({
+    uniforms:uni, transparent:true, side:THREE.DoubleSide, depthWrite:false,
+    vertexShader:`
+      attribute vec3 aBird; uniform float uT; varying float vS;
+      void main(){
+        float id = aBird.x;
+        float ph = id*2.39996;
+        /* geniş bir daire üstünde süzülüyorlar */
+        float r = 52.0 + id*16.0;
+        float sp = 0.075 + mod(id, 3.0)*0.016;
+        float a = uT*sp + ph;
+        vec3 c = vec3(160.0 + cos(a)*r, 26.0 + id*3.4 + sin(uT*0.7 + ph)*2.4, -55.0 + sin(a)*r*0.75);
+        /* kanat çırpışı: uç köşeler aşağı yukarı */
+        float flap = sin(uT*(5.5 + mod(id,4.0)*0.8) + ph)*0.42;
+        vec3 p = position;
+        p.y += abs(p.x)*flap;
+        p *= 3.0;
+        /* uçuş yönüne döndür */
+        float dir = a + 1.5708;
+        float cs = cos(dir), sn = sin(dir);
+        vec3 q = vec3(p.x*cs - p.z*sn, p.y, p.x*sn + p.z*cs);
+        vS = aBird.z;
+        gl_Position = projectionMatrix * viewMatrix * vec4(c + q, 1.0);
+      }`,
+    fragmentShader:`
+      uniform vec3 uCol; uniform float uOn; varying float vS;
+      void main(){
+        if(uOn < 0.5) discard;
+        gl_FragColor = vec4(mix(uCol, uCol*0.55, step(1.5, vS)), 0.95);
+      }`,
+  });
+  const mesh = new THREE.Mesh(g, m);
+  mesh.frustumCulled = false;
+  scene.add(mesh);
+  return { mesh, uni };
+})();
+
+const FLIES = (() => {
+  const N = 90;
+  const pos = new Float32Array(N*3), seed = new Float32Array(N);
+  for(let i = 0; i < N; i++){
+    pos[i*3] = 0; pos[i*3+1] = 0; pos[i*3+2] = 0;
+    seed[i] = rand()*100;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
+  const uni = { uT:{ value:0 }, uC:{ value:new THREE.Vector3() }, uOn:{ value:0 } };
+  const m = new THREE.ShaderMaterial({
+    uniforms:uni, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+    vertexShader:`
+      attribute float aSeed; uniform float uT; uniform vec3 uC; varying float vA;
+      void main(){
+        float s = aSeed;
+        /* oyuncunun çevresinde yavaşça sürüklenen noktalar */
+        vec3 p = uC + vec3(sin(s*1.7 + uT*0.21)*17.0, 0.0, cos(s*2.3 + uT*0.17)*17.0);
+        p.y += 0.7 + sin(uT*0.9 + s)*0.45 + sin(uT*2.3 + s*3.1)*0.12;
+        p.x += sin(uT*1.6 + s*5.0)*0.5;
+        p.z += cos(uT*1.4 + s*4.0)*0.5;
+        vA = 0.35 + 0.65*pow(max(0.0, sin(uT*1.9 + s*7.0)), 3.0);
+        vec4 mv = viewMatrix * vec4(p, 1.0);
+        gl_PointSize = clamp(1.6*(60.0/max(4.0, -mv.z)), 2.0, 9.0);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader:`
+      uniform float uOn; varying float vA;
+      void main(){
+        if(uOn < 0.5) discard;
+        vec2 d = gl_PointCoord - 0.5;
+        float f = 1.0 - smoothstep(0.0, 0.46, length(d));
+        f = f*f;
+        gl_FragColor = vec4(vec3(1.0, 0.86, 0.42)*f*1.4, f*vA);
+      }`,
+  });
+  const pts = new THREE.Points(g, m);
+  pts.frustumCulled = false;
+  scene.add(pts);
+  return { pts, uni };
+})();
+
 /* ---------- animasyon ---------- */
 function animate(){
   requestAnimationFrame(animate);
@@ -7195,6 +7451,15 @@ function animate(){
   perfTick(dt);
   const t = clock.elapsedTime;
   waterUni.uTime.value = t;
+  /* esinti kendi içinde kabarıp iniyor: tek düze bir salınım olmasın */
+  WIND.t.value = t;
+  WIND.k.value = 0.72 + Math.sin(t*0.23)*0.22 + Math.sin(t*0.071)*0.16;
+  CLOUD.t.value = t;
+  GULLS.uni.uT.value = t;
+  GULLS.uni.uOn.value = GS.night ? 0 : 1;
+  FLIES.uni.uT.value = t;
+  FLIES.uni.uOn.value = GS.night ? 1 : 0;
+  FLIES.uni.uC.value.set(P.x, Math.max(0.2, groundAt(P.x, P.z)), P.z);
 
   if(fly){
     fly.t = Math.min(1, fly.t + dt*0.85);
@@ -7639,7 +7904,7 @@ setTimeout(() => {
 
 window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS, IN,
                        VILL, PETS, TUNA, MURAT, BROOMS, FLY, mountBroom, dismountBroom,
-                       HOOPS, RINGS, TOUR, BASKET, SND, sfx, musicOn, sndToggle,
+                       HOOPS, RINGS, TOUR, BASKET, SND, sfx, musicOn, sndToggle, WIND, CLOUD,
                        setTime, setMode, flyTo, toast, interact, throwStone, toggleTorch, switchKid,
                        scene, camera, renderer, THREE, setFx, fx:() => fxOn, cam:() => ({ camYaw, camPitch, camDist }),
                        post:() => ({ composer, stylize, bloom, applyGrade, toonMats, RAMP, RAMP_SOFT, RAMP_HARD, hemi, sun }),
@@ -7654,7 +7919,7 @@ window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS,
    önbelleğe hiç uğramadan soruyor; kendi numarasıyla uyuşmuyorsa bütün
    önbellekleri ve servis çalışanlarını silip bir kez yeniden yükleniyor.
    Döngüye girmesin diye tek seferlik bir işaret bırakıyor.               */
-const BUILD = '19.10.2026 18:07';
+const BUILD = '19.10.2026 18:22';
 /* Başlık ekranındaki damga elle yazılıyordu ve geride kalabiliyordu;
    artık yapı numarasının kendisinden yazılıyor.                          */
 { const el = document.getElementById('build'); if(el) el.textContent = 'sürüm ' + BUILD; }
