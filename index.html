@@ -879,7 +879,7 @@ body.touch #tbtns{display:grid}
     <p class="lede">Ali ve Alya bütün yazı koyda geçiriyor: kabuk, mineralli taş, bir de kimsenin istemediği delik otel terliği — hepsi ganimet. Akşam büfede satılır, gece el feneriyle çakal avına çıkılır. Kim oynuyor?</p>
     <div class="picks" id="picks"></div>
     <button class="btn go" id="start">Başla</button>
-    <p class="build">sürüm 19.10.2026 11:44</p>
+    <p class="build">sürüm 19.10.2026 12:16</p>
     <p class="legend">
       <span><kbd>Sol alt</kbd><b>yön çubuğu — ittikçe koşar</b></span>
       <span><kbd>Ekrana dokun</kbd><b>zıpla</b></span>
@@ -1442,35 +1442,38 @@ function stampY(x, z, r, y){
     }
   }
 }
-/* Kot hücre hücre okununca karakter her hücre sınırında zıplıyordu:
-   saniyede dokuz basamak, hem karakterde hem kamerada titreme. Artık
-   dört komşu hücre arasında doğrusal geçiş yapılıyor; yolu olmayan
-   hücrede arazi kotu kullanıldığı için kaplamanın kenarı da yumuşuyor. */
-const roadLevel = (x, z) => {
+/* Yol kaplamasının kotu.
+   Hücre hücre okununca karakter her hücre sınırında zıplıyordu. İlk
+   düzeltmede yol kotunu arazi kotuyla harmanlamıştım, ama o da kaplamanın
+   kenarında gerçek yüzeyin altına düşürüp ayakları asfalta gömüyordu.
+   Doğrusu: ortalama YALNIZ yol hücreleri üzerinden alınıyor (kaplamanın
+   üstünde gerçek yüzey kotu çıkıyor), kenarda ise yol hücrelerinin
+   ağırlığı azaldıkça sonuç araziye doğru eriyor.                        */
+function roadSurface(x, z){
   const gx = (x - MINX)/BG - 0.5, gz = (z - MINZ)/BG - 0.5;
   const i = Math.floor(gx), j = Math.floor(gz);
   const fx = gx - i, fz = gz - j;
-  let acc = 0, any = false;
+  let acc = 0, w = 0;
   for(let dj = 0; dj <= 1; dj++) for(let di = 0; di <= 1; di++){
     const ii = i + di, jj = j + dj;
-    const w = (di ? fx : 1 - fx)*(dj ? fz : 1 - fz);
-    if(w <= 0) continue;
-    let v;
-    if(ii < 0 || jj < 0 || ii >= BGW || jj >= BGH) v = -1e9;
-    else v = roadY[jj*BGW + ii];
-    if(v < -1e8) v = terrainH(MINX + (ii + 0.5)*BG, MINZ + (jj + 0.5)*BG);
-    else any = true;
-    acc += v*w;
+    if(ii < 0 || jj < 0 || ii >= BGW || jj >= BGH) continue;
+    const v = roadY[jj*BGW + ii];
+    if(v < -1e8) continue;                       /* yolu olmayan hücre sayılmaz */
+    const ww = (di ? fx : 1 - fx)*(dj ? fz : 1 - fz);
+    acc += v*ww; w += ww;
   }
-  return any ? acc : -1e9;
-};
+  return w > 0.0001 ? { y:acc/w, w } : null;     /* w: yol hücrelerinin ağırlığı */
+}
+const roadLevel = (x, z) => { const r = roadSurface(x, z); return r ? r.y : -1e9; };
 /* karakterlerin bastığı kot: arazi ya da üstündeki yol kaplaması */
+/* Karakterlerin bastığı kot: kaplamanın üstündeyken yol yüzeyi, kenarda
+   yolun ağırlığına göre araziye erir, hiçbir yerde arazinin altına inmez. */
 const groundAt = (x, z) => {
-  const t = terrainH(x, z), r = roadLevel(x, z);
-  /* yol kotu yalnız araziden yüksekse geçerli; ızgara kaba olduğu için
-     fazladan taşan hücrelerde karakteri havaya kaldırmasın diye fark
-     sınırlanıyor                                                         */
-  return r > t ? Math.min(r, t + 1.4) : t;
+  const t = terrainH(x, z);
+  const r = roadSurface(x, z);
+  if(!r) return t;
+  const g = t + (r.y - t)*r.w;
+  return g > t ? g : t;
 };
 /* nokta çevresine daire damgası — eskiden kare basılıyordu, köşelerde
    yarıçapın 1,4 katı kadar fazladan alan kapanıyordu                      */
@@ -1616,7 +1619,9 @@ for(const r of W.roads){
         const L = Math.hypot(tx, tz) || 1;
         const nx = -tz/L, nz = tx/L;
         const y = Math.max(terrainH(x - nx*hw, z - nz*hw), terrainH(x + nx*hw, z + nz*hw)) + 0.055;
-        stampY(x, z, hw*0.82, y);
+        /* kaplamanın tamamı işaretleniyor: dar basarsak kenarda yüzeyin
+           altına düşüp ayaklar asfalta gömülüyor                        */
+        stampY(x, z, hw + 0.35, y);   /* bordür payı: erime asfaltın dışında kalsın */
       }
     }
     if(wm >= 6){
@@ -3102,6 +3107,7 @@ function makeMini(gltf, cfg){
 }
 /* durum → klip. Yürüme ve koşma hızı oynatma hızına bağlanıyor ki
    ayaklar yerde kaymasın; klip geçişleri yumuşak erimeyle yapılıyor.    */
+const _lv = new THREE.Vector3();
 function animMini(k, st, dt){
   const u = k.userData, M = u.mini;
   u.spd = lp(u.spd, Math.min(1, st.spd), dt*9);
@@ -3133,11 +3139,31 @@ function animMini(k, st, dt){
   if(a) a.setEffectiveTimeScale(rate);
   M.mixer.update(dt);
 
+  /* Bacak kemikleri uzatılınca ayaklar modelin sıfır noktasının altına
+     indi ve karakter zemine gömüldü. Ölçüm ancak iskelet matrisleri
+     güncellendikten sonra doğru çıkıyor, o yüzden karışımın güncellenmesinin
+     hemen ardından bir kez yapılıp gövde o kadar yukarı kaldırılıyor.    */
+  if(M.lift === undefined){
+    k.updateMatrixWorld(true);
+    let lo = Infinity;
+    k.traverse(o => {
+      if(!o.isSkinnedMesh || !o.getVertexPosition) return;
+      const n = o.geometry.attributes.position.count;
+      for(let i = 0; i < n; i++){
+        o.getVertexPosition(i, _lv); o.localToWorld(_lv);
+        if(_lv.y < lo) lo = _lv.y;
+      }
+    });
+    M.lift = isFinite(lo) ? k.position.y - lo : 0;
+    M.body.position.y += M.lift;
+    M.baseY = M.body.position.y;
+  }
+
   /* yüzerken gövde öne yatar, dalışta daha dik */
   const b = M.body;
   const tilt = st.dive ? -1.25 : (st.swim ? -1.1 : 0);
   b.rotation.x = lp(b.rotation.x, tilt, dt*6);
-  b.position.y = lp(b.position.y, st.swim ? 0.26 : 0, dt*6);
+  b.position.y = lp(b.position.y, M.baseY + (st.swim ? 0.26 : 0), dt*6);
   /* sendeleme */
   b.rotation.z = lp(b.rotation.z, st.stun > 0 ? Math.sin(st.stun*22)*0.2 : 0, dt*10);
 }
@@ -5873,6 +5899,34 @@ window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS,
                        ground:{ terrainH, roadLevel, groundAt, blocked, blockRoad, blockBld },
                        setCam:(y, p2, d) => { camYaw = y; if(p2 !== undefined) camPitch = p2; if(d !== undefined) camDist = d; } };
 /* çevrimdışı oynanabilsin diye servis çalışanı — sadece kendi alan adında */
+/* ---- sürüm kilidini kendi kendine çöz ----------------------------------
+   Eski bir servis çalışanı takılı kaldığında ya da GitHub Pages'in on
+   dakikalık tarayıcı önbelleği araya girdiğinde oyuncu eski yapıda
+   kalabiliyordu. Oyun artık açılışta sunucudaki sürüm numarasını
+   önbelleğe hiç uğramadan soruyor; kendi numarasıyla uyuşmuyorsa bütün
+   önbellekleri ve servis çalışanlarını silip bir kez yeniden yükleniyor.
+   Döngüye girmesin diye tek seferlik bir işaret bırakıyor.               */
+const BUILD = '19.10.2026 12:16';
+(async () => {
+  try{
+    const res = await fetch('version.json?x=' + Date.now(), { cache:'no-store' });
+    if(!res.ok) return;
+    const v = await res.json();
+    if(!v.build || v.build === BUILD){ sessionStorage.removeItem('dk-heal'); return; }
+    if(sessionStorage.getItem('dk-heal')) return;        /* bir kez dene */
+    sessionStorage.setItem('dk-heal', '1');
+    if('serviceWorker' in navigator){
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister().catch(() => {})));
+    }
+    if(window.caches){
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k).catch(() => {})));
+    }
+    location.reload();
+  }catch(e){}
+})();
+
 /* Yeni sürüm yayınlandığında eski sayfa açık kalmasın: servis çalışanı
    değiştiği anda sayfa bir kez kendini yeniliyor.                        */
 if('serviceWorker' in navigator && location.protocol === 'https:'){

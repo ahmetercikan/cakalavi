@@ -5,7 +5,7 @@
    dakika boyunca eski sayfayı ağa hiç sormadan sunabiliyor. Bu yüzden HTML
    ve harita verisi {cache:'reload'} ile isteniyor — tarayıcı önbelleği
    atlanıyor, cevap bizim önbelleğimize yazılıyor.                          */
-const V = 'cakalavi-v10';
+const V = 'cakalavi-v11';
 const CORE = ['./', './index.html', './world.json', './manifest.webmanifest',
               './icon-192.png', './icon-512.png'];
 
@@ -29,7 +29,7 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
   const sameOrigin = url.origin === location.origin;
   const fresh = sameOrigin && (url.pathname.endsWith('.html') || url.pathname.endsWith('/')
-                || url.pathname.endsWith('world.json'));
+                || url.pathname.endsWith('world.json') || url.pathname.endsWith('version.json'));
 
   /* oyun dosyaları: önce ağ (tarayıcı önbelleği atlanarak), olmazsa önbellek */
   if(fresh){
