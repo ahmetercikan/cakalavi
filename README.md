@@ -59,6 +59,14 @@ MegaKit** paketinden (CC0, https://quaternius.com) alınmıştır. Dokuları
 Model dosyaları zorunlu değildir — yüklenemezlerse oyun prosedürel geometriyle
 çalışmaya devam eder.
 
+Yerdeki ot, çakıl ve çalılar oyuncunun 26 metrelik çemberinde duruyor ve
+konumları bulundukları karenin koordinatından türetiliyor — aynı yerde hep
+aynı bitki. Hangi karede ne biteceğini de yalnız zemin ve karenin kendi
+sayısı belirliyor, boş yuva sayısı değil; yuvalar en yüksek talebin %15
+üstünde tutulduğu için hiçbir bitki yuva bitti diye elenmiyor. Çemberin
+dışına çıkanlar son yedi metrede boyları küçülerek siliniyor, yani bitkiler
+belirmek yerine büyüyerek giriyor.
+
 Ağaçlar iki ayrıntı kademesinde duruyor: yakındakiler hazır model, uzaktakiler
 eski prosedürel geometri. Sınırı mesafe değil üçgen bütçesi koyuyor — öbekler
 yakından uzağa sıralanıp bütçe bitene kadar modele geçiriliyor, böylece ağaç
