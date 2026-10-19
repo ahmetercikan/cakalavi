@@ -136,22 +136,44 @@ keskin kalsın diye SVG var. Aynı işaret başlık kartının üstünde de duru
 
 ## Varlıklar
 
-Ali ve Alya, Kenney'in **Mini Characters** paketinden (CC0, https://kenney.nl)
-gelen hazır karakterler. Otuz iki animasyon klibi paketle birlikte geliyor;
-oyun durma, yürüme, koşma, zıplama, düşme, eşya alma ve elde tutma
-kliplerini kullanıyor. Karakter başına 723-876 üçgen.
+Ali ve Alya hazır model değil: ikisi de oyunun içinde kodla kuruluyor.
+Bir süre Kenney'in Mini Characters paketi kullanıldı — otuz iki hazır
+animasyon klibi bedavaydı ama gövde birkaç düz renk bloktan ibaretti:
+omuz yok, boyun yok, yüz dokuya çizili. Yakın kamerada oyuncak gibi
+duruyordu. Hareket zaten burada prosedürel olduğu için paketten
+vazgeçildi; iki .glb dosyası ve doku atlası depodan çıktı.
 
-Paket gövdeleri birkaç düz renk bloktan ibaret olduğu için üstlerine oyunun
-kendi ayrıntıları ekleniyor: Ali'ye kasket, Alya'ya saç bandı ve adım
-temposuyla sallanan at kuyruğu, ikisine burun, kulak, yaka, kemer, ayakkabı
-tabanı ve omuz çantası. Parçalar kemiklere takılıyor, kemiğin kendi ölçeği
-geri alınarak dünya ölçüsünde yazılıyor; ten ve saç renkleri modelin kendi
-doku atlasından okunuyor ki eklenen parçalar gövdeyle birebir tutsun.
-HUD madalyonundaki portreler de aynı renklerle çiziliyor. Ayrıntıların
-tamamı karakter başına 1.838 üçgen; ölçülen kare hızı farkı sıfır.
+Yeni gövdelerin ölçüsü çocuk oranında, ayak tabanı sıfır kabul edilerek:
+kalça 0,60 — omuz 0,98 — çene 1,02 — tepe 1,31 metre. Uzuvlar omuzdan
+bileğe tek parça deri; iki kemiğe bağlı oldukları için dirsek ve diz
+kumaş gibi kıvrılıyor, eklemde geometri kırılmıyor.
 
-Çanta baştan görünüyor; "File çanta" yükseltmesi alınınca sırt çantası da
-ekleniyor.
+Yüz çiziliyor, parçalardan kurulmuyor. Göz, kaş ve ağız bir süre küçük
+küre ve halkalardan yapıldı; küre kafatasının dışına taşınca profilden
+baloncuk gibi duruyor, içeri alınca göz bebeği kayboluyordu. Artık tek
+bir tuval dokusu küreye sarılıyor (`faceTex`): three.js küre dokusunda
+u=0,75 tam olarak yüzün baktığı yön, bir yarıçap 1024/2π piksel, bu
+yüzden oran ve çizgi kalınlığı piksel piksel yazılabiliyor. Göz kırpma
+dokuyu kapalı sürümle değiştiriyor.
+
+Ali kıvırcık: saç, saç çizgisi boyunca dizilen yüz kırk küçük kümeden
+tek geometride birleşiyor, her küme kendi ton farkını köşe renginde
+taşıyor. Kümeler önce bütün kafatasına serpiliyordu ve gözleri de
+kapatıyordu; saç çizgisi artık yöne göre değişiyor — önde kaşın hemen
+üstünde bitiyor, arkada enseye iniyor. Alya'nın katmanlı kısa saçı ve
+adım temposuyla sallanan at kuyruğu var.
+
+Omuz çantası önce sırt çantasıydı: oyuncu karakteri neredeyse hep
+arkadan gördüğü için çanta bütün sırtı kapatıyor, kıyafet hiç
+görünmüyordu. Askı göğsü çaprazlıyor, kese kalçanın yanında duruyor.
+"File çanta" yükseltmesi alınınca diğer kalçaya ganimet filesi geliyor.
+
+Köylüler de aynı elden geçti: kutu gövde ve kutu kafa yerine dönel
+profiller ve küreler. Baş hâlâ tek geometri — yetmiş köylü için çizim
+sayısı değişmedi.
+
+HUD madalyonundaki ve başlık ekranındaki portreler aynı renklerle elle
+çiziliyor; madalyondaki çocukla koşan çocuk aynı kişi.
 
 `assets/` altındaki kaya, çakıl, çalı ve ağaç modelleri Quaternius'un **Stylized Nature
 MegaKit** paketinden (CC0, https://quaternius.com) alınmıştır. Dokuları

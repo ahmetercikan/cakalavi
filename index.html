@@ -1076,7 +1076,7 @@ try {
    modeller; oyun kendi düz toon renklerini uyguluyor, dosyalar bu yüzden
    küçük (toplam ~180 KB). Yüklenemezlerse oyun eski prosedürel geometriyle
    çalışmaya devam ediyor — model dosyaları zorunlu değil.                 */
-const PROP = { rock:[], pebble:[], bush:null, tree:{}, kid:{} };
+const PROP = { rock:[], pebble:[], bush:null, tree:{} };
 /* modeli tabanı sıfırda, yatayda ortalı ve bir metre boyunda hale getirir */
 function normProp(geo){
   const g = geo.clone();
@@ -1096,8 +1096,7 @@ try {
   const loader = new GLTFLoader();
   const want = [['rock','Rock_Medium_1'], ['rock','Rock_Medium_2'], ['rock','Rock_Medium_3'],
                 ['pebble','Pebble_Round_1'], ['pebble','Pebble_Round_2'], ['pebble','Pebble_Round_3'],
-                ['bush','Bush_Common'], ['pine','Pine_5'], ['olive','CommonTree_5'],
-                ['kidA','ali'], ['kidB','alya']];
+                ['bush','Bush_Common'], ['pine','Pine_5'], ['olive','CommonTree_5']];
   const got = await Promise.all(want.map(([k, n]) =>
     loader.loadAsync('assets/' + n + '.glb').then(r => [k, r]).catch(() => [k, null])));
   /* ağaçta gövde ve yaprak ayrı parçalar: ikisini düz birer renge boyayıp
@@ -1105,7 +1104,6 @@ try {
   const TREE_COL = { pine:[0x5f4a35, 0x3d6b3c], olive:[0x5e4a36, 0x6b8c4a] };
   for(const [k, r] of got){
     if(!r) continue;
-    if(k === 'kidA' || k === 'kidB'){ PROP.kid[k] = r; continue; }
     if(TREE_COL[k]){
       const parts = [], cols = [];
       r.scene.traverse(o => {
@@ -3157,7 +3155,6 @@ const hairMat = c => toon({ color:c, roughness:0.52, sheen:0.7,
                                                       sheenColor:new THREE.Color(0xd8c7a8), sheenRoughness:0.6 });
 const EYE_W = toon({ color:0xf7f3ea, roughness:0.28 });
 const EYE_D = toon({ color:0x1d1a16, roughness:0.18 });
-const GLINT = new THREE.MeshBasicMaterial({ color:0xffffff });
 
 function lathe(profile, mat, seg){
   const pr = profile[profile.length-1][1] < profile[0][1] ? [...profile].reverse() : profile;
@@ -3228,9 +3225,13 @@ function makeHand(mat, s){
    yüz yakından okunuyor.
    İskelet aynı: kalça → omurga → göğüs → boyun → baş, kalça → uyluk →
    baldır → ayak. Dizler geriye, dirsekler öne bükülür.                   */
+/* Ölçüler çocuk oranına göre, ayak tabanı sıfır kabul edilerek: kalça
+   0,60 — boyun 1,00 — çene 1,02 — tepe 1,31. Bacak boyun yarısı kadar,
+   baş boyun beşte biri. Daha uzun bacak denendi: çocuk değil manken
+   gibi duruyordu; daha büyük baş da bebek görüntüsü veriyordu.         */
 const KID = {
-  hip:0.60, spine:0.07, chest:0.09, shoulderY:0.155, shoulderX:0.132,
-  thigh:0.285, shin:0.265, upperArm:0.195, foreArm:0.18, headY:0.40, headR:0.142,
+  hip:0.600, spine:0.082, chest:0.105, shoulderY:0.150, shoulderX:0.140,
+  thigh:0.290, shin:0.262, upperArm:0.198, foreArm:0.180, headY:0.338, headR:0.126,
 };
 
 /* --- iki kemikli uzuv derisi -------------------------------------------
@@ -3296,469 +3297,261 @@ function limbSkin(rTop, rMid, rBot, lenUp, lenLo, mat){
   return { mesh, up, lo };
 }
 
-/* ---------- hazır karakterler --------------------------------------------
-   Ali ve Alya elle kurulmuş gövdelerdi; gerçek oran da oyun oranı da
-   denendi, ikisi de istenen görüntüyü vermedi. Artık Kenney'in "Mini
-   Characters" paketinden (CC0) geliyorlar: tombul, düz renk, okunaklı
-   silüet ve en önemlisi otuz iki hazır animasyon klibi -- durma, yürüme,
-   koşma, zıplama, düşme, eşya alma, elde tutma. Hareket artık elle
-   yazılmış eklem açılarıyla değil, bu kliplerle sürülüyor.
-   Model 0,66 birim boyunda; oyun ölçeğine büyütülüyor.                   */
-const MINI_SC = 1.52;
-/* Paket karakterleri tombul bebek oranında (iki baş boyu). Çocuk gibi
-   dursunlar diye bacak ve gövde kemikleri uzatılıyor, baş ve kollar
-   gövdenin uzamasından etkilenmesin diye ters ölçekleniyor. Klipler
-   ölçek kanalını yalnız kullanmadığımız "static" klibinde oynattığı
-   için bu değerler kalıcı.                                            */
-const MINI_LEG = 2.15, MINI_TORSO = 1.42, MINI_ARM = 1.3;
+/* ---------- Ali ve Alya ---------------------------------------------------
+   Çocuklar bir süre hazır paket karakterlerle oynatıldı: otuz iki hazır
+   animasyon klibi bedavaydı ama gövde birkaç düz renk bloktan ibaretti —
+   omuz yok, boyun yok, yüz dokuya çizili. Yakın kamerada oyuncak gibi
+   duruyordu. Gövdeler yeniden elle kuruldu; hareket zaten burada
+   prosedürel (animKid), hazır klibe ihtiyaç yok.
 
-/* ---- karakter ayrıntıları -----------------------------------------------
-   Paket gövdeleri birkaç düz renk bloktan ibaret: uzaktan hem yüz hem
-   silüet düz kalıyor. Pakete dokunmadan, kemiklere takılan küçük
-   parçalarla ayrıntı ekleniyor -- kasket, at kuyruğu, kaş, kulak, burun,
-   yaka, kemer, ayakkabı ve omuz çantası.
+   Form dili sahnenin geri kalanıyla aynı: dönel yüzeyler, yuvarlatılmış
+   hacimler, düz renk üstüne kademeli toon rampası. Ayrıntı yüzde ve
+   siluette toplanıyor; oyuncu karakteri çoğu zaman arkadan gördüğü için
+   en çok çalışan üç parça saç, çanta ve ayakkabı.                        */
 
-   Parçalar dünya ölçüsünde (metre) yazılıp kemiğin kendi ölçeği geri
-   alınıyor; yoksa bacak kemiğindeki 2,15 kat uzatma ayakkabıyı da
-   uzatırdı. Kemiğin yerel eksenleri: +Y yukarı, +Z yüzün baktığı yön.  */
-function boneSlot(bn){
-  const g = new THREE.Group();
-  bn.add(g);
-  bn.updateWorldMatrix(true, false);
-  const s = new THREE.Vector3();
-  bn.matrixWorld.decompose(new THREE.Vector3(), new THREE.Quaternion(), s);
-  g.scale.set(1/s.x, 1/s.y, 1/s.z);
-  return g;
-}
-function dbox(w, h, d, mat, x, y, z){
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-  m.position.set(x, y, z);
-  m.castShadow = m.receiveShadow = true;
-  return m;
-}
-/* Eklenen parçaların rengi paketin kendi atlasından okunuyor; ten, saç
-   ve kıyafet renkleri gövdeyle birebir tutsun diye. Atlas bir renk
-   paleti olduğu için bir bölgedeki en sık piksel o bölgenin rengidir. */
-const _atlasPx = new Map();
-function atlasPixels(tex){
-  const img = tex && tex.image;
-  if(!img || !img.width) return null;
-  let d = _atlasPx.get(img);
-  if(d === undefined){
-    try{
-      const c = document.createElement('canvas');
-      c.width = img.width; c.height = img.height;
-      const x = c.getContext('2d', { willReadFrequently:true });
-      x.drawImage(img, 0, 0);
-      d = x.getImageData(0, 0, c.width, c.height);
-    }catch(e){ d = null; }
-    _atlasPx.set(img, d);
+/* ---- yüz ----------------------------------------------------------------
+   Göz, kaş ve ağız bir süre küçük küre ve halkalardan kuruldu. Üç sorun
+   çıktı: küre kafatasının dışına taşıp profilden baloncuk gibi duruyor,
+   içeri alınca göz bebeği kayboluyor, kaşla kirpik de her açıdan başka
+   bir şeye benziyordu. Yüz artık çiziliyor: tek bir tuval dokusu küreye
+   sarılıyor, oran ve çizgi kalınlığı piksel piksel kontrol ediliyor.
+
+   Küre dokusunun yatay ekseni u: three.js'te u=0,75 tam olarak -Z yönü,
+   yani yüzün baktığı taraf. Dikey eksen v aşağıdan yukarı. 1024 piksel
+   genişlik çemberin tamamı demek, bu yüzden bir yarıçap 1024/2π piksel.  */
+const faceCache = new Map();
+function faceTex(cfg, closed){
+  const key = [cfg.skin, cfg.hair, cfg.eye, cfg.blush, cfg.freckle ? 1 : 0, closed ? 1 : 0].join(':');
+  const hit = faceCache.get(key);
+  if(hit) return hit;
+  const W = 1024, H = 512, S = W/(2*Math.PI);      /* bir yarıçap kaç piksel */
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  const hex = v => '#' + v.toString(16).padStart(6, '0');
+  const SKIN = hex(cfg.skin), HAIR = hex(cfg.hair);
+  const EYE = hex(cfg.eye || 0x3b2a1d);
+  x.fillStyle = SKIN; x.fillRect(0, 0, W, H);
+
+  /* yüzün merkezi: u=0,75 — v=0,50 */
+  const cx = W*0.75, cy = H*0.5;
+  const px = (ux, uy) => [cx + ux*S, cy - uy*S];    /* yarıçap biriminden piksele */
+
+  /* --- yanak allığı: en altta, yumuşak --- */
+  for(const s of [-1, 1]){
+    const [bx, by] = px(s*0.46, -0.10);
+    const g = x.createRadialGradient(bx, by, 1, bx, by, 0.20*S);
+    g.addColorStop(0, hex(cfg.blush || 0xdd9170) + 'd0');
+    g.addColorStop(1, hex(cfg.blush || 0xdd9170) + '00');
+    x.fillStyle = g; x.globalAlpha = 0.32;
+    x.beginPath(); x.ellipse(bx, by, 0.21*S, 0.13*S, 0, 0, 6.3); x.fill();
+    x.globalAlpha = 1;
   }
-  return d;
-}
-function atlasTone(mesh, lo, hi, fallback){
-  const tex = mesh && mesh.material && mesh.material.map;
-  const d = atlasPixels(tex);
-  const geo = mesh && mesh.geometry;
-  if(!d || !geo || !geo.attributes.uv) return new THREE.Color(fallback);
-  geo.computeBoundingBox();
-  const bb = geo.boundingBox, h = bb.max.y - bb.min.y;
-  const y0 = bb.min.y + h*lo, y1 = bb.min.y + h*hi;
-  const pos = geo.attributes.position, uv = geo.attributes.uv;
-  const cnt = new Map();
-  for(let i = 0; i < pos.count; i++){
-    const y = pos.getY(i);
-    if(y < y0 || y > y1) continue;
-    const u = uv.getX(i), v = tex.flipY ? 1 - uv.getY(i) : uv.getY(i);
-    const px = Math.min(d.width - 1, Math.max(0, Math.round(u*d.width)));
-    const py = Math.min(d.height - 1, Math.max(0, Math.round(v*d.height)));
-    const o = (py*d.width + px)*4;
-    const key = (d.data[o] << 16) | (d.data[o+1] << 8) | d.data[o+2];
-    cnt.set(key, (cnt.get(key) || 0) + 1);
+  if(cfg.freckle){
+    x.fillStyle = hex(cfg.blush || 0xdd9170); x.globalAlpha = 0.5;
+    for(let i = 0; i < 14; i++){
+      const s = i < 7 ? -1 : 1, t = i % 7;
+      const [fx, fy] = px(s*(0.30 + (t % 3)*0.075), -0.03 - Math.floor(t/3)*0.07);
+      x.beginPath(); x.arc(fx, fy, 0.018*S, 0, 6.3); x.fill();
+    }
+    x.globalAlpha = 1;
   }
-  let best = -1, bn = 0;
-  for(const [k, n] of cnt) if(n > bn){ bn = n; best = k; }
-  if(best < 0) return new THREE.Color(fallback);
-  return new THREE.Color().setRGB(((best >> 16) & 255)/255, ((best >> 8) & 255)/255,
-                                  (best & 255)/255, THREE.SRGBColorSpace);
-}
-const shade = (c, k) => c.clone().multiplyScalar(k);
 
-/* Ölçüler karakterin kendi iskeletinden alındı (ayak hizası sıfır):
-   baş kemiği 0,94 m -- baş bloğu 0,42 m boyunda, 0,58 m eninde;
-   gövde kemiği 0,58 m -- gövde 0,36 m boyunda, 0,46 m eninde;
-   bacak kemikleri 0,58 m, ayak tabanı kemiğin 0,576 m altında.        */
-function dressMini(root, B, cfg, who){
-  let headMesh = null, bodyMesh = null;
-  root.traverse(o => {
-    if(o.name === 'head-mesh') headMesh = o;
-    else if(o.name === 'body-mesh') bodyMesh = o;
-  });
-  /* Ten ve saç modelin kendi atlasından okunuyor -- burun, kulak, kaş ve
-     at kuyruğu gövdeyle birebir tutsun diye. Kıyafet rengi okunmuyor:
-     gövde kemiğine kol ve boyun pikselleri de düşüyor, örnek şaşıyor.
-     Giysi ayrıntıları zaten kontrast versin diye krem tonunda.         */
-  const skin  = atlasTone(headMesh, 0.00, 0.28, cfg.skin);
-  const hairC = atlasTone(headMesh, 0.78, 1.00, cfg.hair);
-  const M = {
-    skin:mkMat(skin), burun:mkMat(shade(skin, 0.90)), hair:mkMat(hairC),
-    yaka:mkMat(cfg.trim || 0xf6ecd9), kemer:mkMat(0x56402c), toka:mkMat(0xd8b05a),
-    taban:mkMat(cfg.sole || 0xdcd7c9), bant:mkMat(cfg.lace || 0xcfc6b4),
-    canta:mkMat(cfg.pack || 0x3f6b52), cantaD:mkMat(cfg.packD || 0x2d5240),
-    aksan:mkMat(who === 'ali' ? (cfg.cap || 0xf4705a) : (cfg.band || 0xefb455)),
+  /* --- gözler --- */
+  for(const s of [-1, 1]){
+    const [ex, ey] = px(s*0.34, 0.10);
+    if(closed){
+      /* kapalı göz: hafif aşağı kavisli tek çizgi */
+      x.strokeStyle = EYE; x.lineWidth = 0.045*S; x.lineCap = 'round';
+      x.beginPath();
+      x.moveTo(ex - 0.19*S, ey - 0.02*S);
+      x.quadraticCurveTo(ex, ey + 0.07*S, ex + 0.19*S, ey - 0.02*S);
+      x.stroke();
+    }else{
+      x.fillStyle = '#f8f4ec';
+      x.beginPath(); x.ellipse(ex, ey, 0.195*S, 0.225*S, 0, 0, 6.3); x.fill();
+      x.fillStyle = EYE;
+      x.beginPath(); x.arc(ex, ey - 0.012*S, 0.128*S, 0, 6.3); x.fill();
+      x.fillStyle = '#1b1713';
+      x.beginPath(); x.arc(ex, ey - 0.012*S, 0.064*S, 0, 6.3); x.fill();
+      x.fillStyle = '#ffffff';
+      x.beginPath(); x.arc(ex - s*0.052*S, ey + 0.072*S, 0.046*S, 0, 6.3); x.fill();
+      x.globalAlpha = 0.65;
+      x.beginPath(); x.arc(ex + s*0.062*S, ey - 0.082*S, 0.024*S, 0, 6.3); x.fill();
+      x.globalAlpha = 1;
+      /* üst kapak: gözün üstünü biraz örtüyor, bakış uykulu olmasın diye az */
+      x.fillStyle = SKIN;
+      x.beginPath();
+      x.moveTo(ex - 0.21*S, ey + 0.10*S);
+      x.quadraticCurveTo(ex, ey + 0.30*S, ex + 0.21*S, ey + 0.10*S);
+      x.lineTo(ex + 0.21*S, ey + 0.26*S); x.lineTo(ex - 0.21*S, ey + 0.26*S);
+      x.closePath(); x.fill();
+      /* kirpik hattı: kapağın kenarını koyultuyor */
+      x.strokeStyle = '#2a211a'; x.lineWidth = 0.038*S; x.lineCap = 'round';
+      x.beginPath();
+      x.moveTo(ex - 0.195*S, ey + 0.095*S);
+      x.quadraticCurveTo(ex, ey + 0.275*S, ex + 0.195*S, ey + 0.095*S);
+      x.stroke();
+    }
+    /* kaş */
+    x.strokeStyle = HAIR; x.lineWidth = 0.062*S; x.lineCap = 'round';
+    x.beginPath();
+    const [b0x, b0y] = px(s*0.17, 0.40), [b1x, b1y] = px(s*0.36, 0.47), [b2x, b2y] = px(s*0.52, 0.41);
+    x.moveTo(b0x, b0y); x.quadraticCurveTo(b1x, b1y, b2x, b2y); x.stroke();
+  }
+
+  /* --- ağız: hafif gülümseme --- */
+  x.strokeStyle = '#9c5543'; x.lineWidth = 0.042*S; x.lineCap = 'round';
+  x.beginPath();
+  const [m0x, m0y] = px(-0.155, -0.40), [m1x, m1y] = px(0, -0.52), [m2x, m2y] = px(0.155, -0.40);
+  x.moveTo(m0x, m0y); x.quadraticCurveTo(m1x, m1y, m2x, m2y); x.stroke();
+
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  faceCache.set(key, t);
+  return t;
+}
+
+/* Saç küme küme kurulan tek bir geometri: her küme kendi rengini vertex
+   renginde taşıyor, bu yüzden hepsi tek çizimde gidiyor ama düz bir kütle
+   gibi görünmüyor — bukleler arasında ton farkı var.                     */
+function hairClump(opts){
+  let s = opts.seed >>> 0;
+  const rnd = () => (s = (s*1664525 + 1013904223) >>> 0)/4294967296;
+  const base = new THREE.Color(opts.color);
+  const gs = [], cs = [];
+  const put = (x, y, z, r, k, flat) => {
+    const g = new THREE.SphereGeometry(r, 8, 6);
+    g.scale(0.82 + rnd()*0.4, (flat || 0.94)*(0.8 + rnd()*0.4), 0.82 + rnd()*0.4);
+    g.translate(x, y, z);
+    gs.push(g); cs.push(base.clone().multiplyScalar(k));
   };
-  M.kasketD = mkMat(shade(new THREE.Color(cfg.cap || 0xf4705a), 0.52));
-
-  /* --- baş --- */
-  const hs = boneSlot(B['head'] || root);
-  /* Kaş denendi ve vazgeçildi: gözler atlasa çizili ve iki karakterde
-     farklı yükseklikte -- Ali'de güneş gözlüğü, Alya'da gözünü kapatan
-     bir çubuk gibi duruyordu. Yüz ayrıntısı burun ve kulakla sınırlı.  */
-  /* Burun kutu olduğunda üst yüzü güneşi dik alıp parlıyor ve açık tenli
-     Alya'da alnına yapışmış beyaz bir etiket gibi duruyordu. Yuvarlak ve
-     tenden bir tık koyu; 1-2 cm çıkıntı yapıyor.                        */
-  const bur = new THREE.Mesh(new THREE.SphereGeometry(0.040, 12, 9), M.burun);
-  bur.scale.set(1.1, 0.85, 0.62); bur.position.set(0, 0.204, 0.205);
-  bur.castShadow = true; hs.add(bur);
-  hs.add(dbox(0.034, 0.086, 0.086, M.skin,  0.296, 0.202, -0.012));
-  hs.add(dbox(0.034, 0.086, 0.086, M.skin, -0.296, 0.202, -0.012));
-
-  let tail = null;
-  if(who === 'ali'){
-    /* Ali kıvırcık saçlı bir çocuk. Paketin saçı tek parça köşeli bir
-       blok; kasketin altından çıkan kısma küme küme bukle ekleniyor.
-       Hepsi tek geometride birleştirildi, on dört ayrı çizim olmasın.  */
-    const bukle = [];
-    const koy = (x, y, z, r) => {
-      const g = new THREE.SphereGeometry(r, 8, 6);
-      g.scale(1, 0.92, 0.92); g.translate(x, y, z);
-      bukle.push(g);
-    };
-    for(let i = 0; i < 9; i++){
-      const a = Math.PI*(0.18 + i/8*0.64);          /* arkadan kulağa doğru yay */
-      const r = 0.300 + (i % 2)*0.012;
-      for(const sx of [-1, 1]){
-        koy(sx*Math.sin(a)*r, 0.236 - Math.cos(a)*0.028 - (i % 3)*0.021,
-            -Math.cos(a)*(r*0.82), 0.062 + (i % 3)*0.009);
-      }
-    }
-    koy(0, 0.208, -0.272, 0.070); koy(0, 0.144, -0.258, 0.060);
-    koy(-0.118, 0.300, 0.208, 0.050); koy(0.126, 0.296, 0.206, 0.046);
-    hs.add(new THREE.Mesh(mergeSimple(bukle, bukle.map(() => hairC)),
-      toon({ vertexColors:true, ramp:RAMP_SOFT, rim:0.22 })));
-    hs.children[hs.children.length - 1].castShadow = true;
-    /* kasket: kubbe kafayı sarıyor, siperlik silüete kırık veriyor.
-       Köşeli kutu şapka gibi durmasın diye tepe yarım küre.            */
-    const kub = new THREE.Mesh(new THREE.SphereGeometry(0.306, 18, 10, 0, 6.283, 0, 1.57), M.aksan);
-    kub.scale.set(1, 0.56, 0.82); kub.position.set(0, 0.330, -0.016);
-    kub.castShadow = kub.receiveShadow = true; hs.add(kub);
-    const ban = new THREE.Mesh(new THREE.CylinderGeometry(0.310, 0.312, 0.034, 18), M.kasketD);
-    ban.scale.z = 0.82; ban.position.set(0, 0.338, -0.016);
-    ban.castShadow = true; hs.add(ban);
-    /* siperlik: yarım disk, düz kenarı arkada */
-    /* siperlik kubbenin içinde kalmasın: kubbenin derinliği 0,25 m */
-    const sip = new THREE.Mesh(new THREE.CylinderGeometry(0.336, 0.336, 0.026, 18, 1, false, -1.5708, 3.1416), M.aksan);
-    sip.position.set(0, 0.328, 0.034); sip.scale.set(0.86, 1, 1);
-    sip.rotation.set(-0.10, 0, 0); sip.castShadow = true; hs.add(sip);
-    const dug = new THREE.Mesh(new THREE.SphereGeometry(0.028, 10, 8), M.kasketD);
-    dug.position.set(0, 0.500, -0.016); hs.add(dug);
-  }else{
-    /* saç bandı ve at kuyruğu: en güçlü silüet farkı */
-    hs.add(dbox(0.596, 0.046, 0.478, M.aksan, 0, 0.356, -0.008));
-    tail = new THREE.Group();
-    tail.position.set(0, 0.272, -0.238);
-    tail.rotation.x = 0.62;
-    hs.add(tail);
-    tail.add(dbox(0.118, 0.072, 0.118, M.aksan, 0, -0.028, 0));
-    /* sekiz dilim: gövdenin köşeli diliyle uyumlu, pürüzsüz koni gibi
-       sarkmasın diye kısa ve dolgun                                    */
-    const kuy = lathe([[0.016, -0.262], [0.056, -0.224], [0.094, -0.138],
-                       [0.100, -0.068], [0.088, -0.014], [0.015, 0.0]], M.hair, 8);
-    kuy.castShadow = true; tail.add(kuy);
+  const R = opts.R;
+  /* Kümeler bütün küreye serpilince gözleri de kapatıyordu. Saç çizgisi
+     yönden yöne değişiyor: önde kaşın hemen üstünde bitiyor, yanlarda
+     kulağa, arkada enseye kadar iniyor.                                 */
+  for(let i = 0; i < opts.n; i++){
+    const t = (i + 0.5)/opts.n;
+    const phi = Math.acos(1 - t*1.40);             /* tepeden aşağı tarama */
+    const th  = i*2.39996;                         /* altın açı: kümeler kümelenmiyor */
+    const sp  = Math.sin(phi), cp = Math.cos(phi);
+    const dx = sp*Math.cos(th), dz = sp*Math.sin(th);
+    const front = Math.max(0, -dz);                /* yüz -Z yönünde */
+    if(phi > opts.cover - front*opts.hairline) continue;
+    const rr = R*(0.96 + rnd()*0.10);
+    put(dx*rr, cp*rr*1.06 + opts.y, dz*rr*0.97,
+        opts.r0 + rnd()*opts.r1, 0.90 + rnd()*0.2);
   }
-
-  /* --- gövde: yaka, kemer, omuz çantası --- */
-  const ts = boneSlot(B['torso'] || root);
-  ts.add(dbox(0.316, 0.044, 0.344, M.yaka, 0, 0.330, -0.022));
-  ts.add(dbox(0.440, 0.032, 0.348, M.kemer, 0, -0.058, -0.040));
-  ts.add(dbox(0.064, 0.044, 0.026, M.toka,  0, -0.058, 0.150));
-
-  const canta = new THREE.Group(); ts.add(canta);
-  const askı = dbox(0.072, 0.54, 0.046, M.cantaD, -0.012, 0.128, 0.152);
-  askı.rotation.z = -0.80; canta.add(askı);
-  const omuz = dbox(0.084, 0.052, 0.30, M.cantaD, 0.176, 0.318, 0.026);
-  canta.add(omuz);
-  /* Kese kalçanın yanına konulunca aşağı sarkan kolun arkasında
-     kalıyordu; oyun kamerası da çoğu zaman arkadan baktığı için çanta
-     bel hizasında, sırtın sağ tarafında duruyor.                       */
-  const kese = new THREE.Group(); kese.position.set(-0.132, -0.092, -0.300);
-  kese.rotation.y = -0.22; canta.add(kese);
-  kese.add(dbox(0.272, 0.216, 0.138, M.canta,  0, 0, 0));
-  kese.add(dbox(0.282, 0.068, 0.150, M.cantaD, 0, 0.122, 0));
-  kese.add(dbox(0.062, 0.052, 0.026, M.toka,   0, 0.062, 0.078));
-
-  /* --- ayakkabılar --- */
-  for(const k of ['leg-left', 'leg-right']){
-    if(!B[k]) continue;
-    const ls = boneSlot(B[k]);
-    /* Modelin kendi ayağı 0,20 m eninde; kutular bundan dar kalırsa
-       içinde kaybolur. Taban ve bant biraz taşacak kadar geniş.       */
-    ls.add(dbox(0.224, 0.034, 0.366, M.taban, 0, -0.5590, -0.014));
-    ls.add(dbox(0.226, 0.028, 0.112, M.bant,  0, -0.5010, 0.116));
-    ls.add(dbox(0.226, 0.026, 0.108, M.bant,  0, -0.4640, -0.070));
-  }
-  return { canta, tail };
-}
-
-function makeMini(gltf, cfg){
-  const G = new THREE.Group();
-  /* yüzme eğimi ve sendeleme için ara grup; model kendi içinde döndürülüyor
-     çünkü Kenney karakterleri +Z'ye bakıyor, oyunun ileri yönü -Z        */
-  const body = new THREE.Group();
-  const root = gltf.scene;
-  root.scale.setScalar(MINI_SC);
-  root.rotation.y = Math.PI;
-  body.add(root);
-  G.add(contactBlob(0.30));
-  G.add(body);
-  /* paketin PBR malzemesi yerine oyunun toon ışığı, doku atlası korunuyor */
-  root.traverse(o => {
-    if(!o.isMesh) return;
-    const m = new THREE.MeshToonMaterial({ map:o.material.map, gradientMap:RAMP_CLOTH });
-    if(m.map){
-      /* colormap bir renk paleti atlası: yumuşak süzgeç ve mipmap komşu
-         kareleri birbirine karıştırıp renkleri çamurlaştırıyor, uzaktan
-         ayrıntı kayboluyor. Keskin süzgeç her üçgene kendi düz rengini
-         veriyor.                                                        */
-      m.map.colorSpace = THREE.SRGBColorSpace;
-      m.map.magFilter = THREE.NearestFilter;
-      m.map.minFilter = THREE.NearestFilter;
-      m.map.generateMipmaps = false;
-      m.map.needsUpdate = true;
-    }
-    rimLight(m, 0.34);
-    o.material = m;
-    o.castShadow = o.receiveShadow = true;
-    o.frustumCulled = false;
-  });
-  const B = {};
-  root.traverse(o => { if(o.isBone) B[o.name] = o; });
-  for(const k of ['leg-left', 'leg-right']) if(B[k]) B[k].scale.y = MINI_LEG;
-  if(B['torso']){
-    B['torso'].scale.y = MINI_TORSO;
-    /* gövdenin uzaması başı ve kolları da uzatmasın; baş ayrıca biraz
-       küçültülüyor, paket oranında kafa gövdenin yarısı kadardı        */
-    if(B['head']) B['head'].scale.set(0.84, 0.84/MINI_TORSO, 0.84);
-    for(const k of ['arm-left', 'arm-right'])
-      if(B[k]) B[k].scale.set(1, MINI_ARM/MINI_TORSO, 1);
-  }
-  /* sağ kolun ucunda eşya tutacağı — fener, çakı, taş buraya takılıyor.
-     Kemik zinciri modelin ölçeğini taşıdığı için ters ölçek veriliyor.  */
-  const hand = new THREE.Group();
-  hand.position.set(0, -0.17, 0.02);
-  hand.scale.set(0.62/MINI_SC, 0.62/(MINI_SC*MINI_ARM), 0.62/MINI_SC);
-  (B['arm-right'] || root).add(hand);
-  /* File çanta yükseltmesinin sırt çantası. Kemiğin yerel +Z'si yüzün
-     baktığı yön; eksi değer verilmediği için çanta sırtta değil göğüste
-     duruyordu.                                                         */
-  const pack = new THREE.Group();
-  pack.position.set(0, 0.12, -0.24); pack.scale.set(1/MINI_SC, 1/(MINI_SC*MINI_TORSO), 1/MINI_SC);
-  (B['torso'] || root).add(pack);
-  const packM = mkMat(cfg.pack || 0x3f6b52), packD = mkMat(cfg.packD || 0x2f5240);
-  const sack = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), packM);
-  sack.scale.set(0.115, 0.14, 0.07); pack.add(sack);
-  const flap = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10, 0, 6.283, 0, 1.1), packD);
-  flap.scale.set(0.118, 0.1, 0.074); flap.position.y = 0.06; pack.add(flap);
-  pack.visible = false;
-
-  const detay = dressMini(root, B, cfg, cfg.who);
-
-  const mixer = new THREE.AnimationMixer(root);
-  const act = {};
-  for(const c of gltf.animations) act[c.name] = mixer.clipAction(c);
-  for(const k of ['jump', 'fall', 'pick-up', 'attack-melee-right']){
-    if(act[k]){ act[k].setLoop(THREE.LoopOnce); act[k].clampWhenFinished = true; }
-  }
-  if(act.idle) act.idle.play();
-  G.userData = { mini:{ mixer, act, cur:'idle', airT:0, body, tail:detay.tail, tt:0 },
-                 pack, canta:detay.canta, armR:{ hand }, head:B['head'] || root,
-                 spd:0, throwT:0, pickT:0, cfg };
-  return G;
-}
-/* durum → klip. Yürüme ve koşma hızı oynatma hızına bağlanıyor ki
-   ayaklar yerde kaymasın; klip geçişleri yumuşak erimeyle yapılıyor.    */
-const _lv = new THREE.Vector3();
-function animMini(k, st, dt){
-  const u = k.userData, M = u.mini;
-  u.spd = lp(u.spd, Math.min(1, st.spd), dt*9);
-  if(u.throwT > 0) u.throwT -= dt;
-  if(u.pickT > 0) u.pickT -= dt;
-  M.airT = st.air ? M.airT + dt : 0;
-
-  /* Yürüme ile koşma arasındaki sınır tek bir sayıydı (0.55) ve yürüme
-     hızı tam oraya düşüyordu; klip saniyede dört kez değişip bacaklar
-     seğiriyordu. Açma ve kapama eşikleri ayrıldı: yürüme 0.62'de,
-     koşma 1.0'da oturuyor, ikisi de bandın dışında kaldı.                 */
-  if(u.spd > 0.80) M.fast = true; else if(u.spd < 0.72) M.fast = false;
-  let want = 'idle', rate = 1;
-  if(st.fly){ want = M.act['sit'] ? 'sit' : 'idle'; rate = 1; }
-  else if(st.swim){ want = 'sprint'; rate = 0.75; }
-  else if(st.air) want = M.airT > 0.18 ? 'fall' : 'jump';
-  else if(M.fast && u.spd > 0.06){ want = 'sprint'; rate = 0.75 + u.spd*0.6; }
-  else if(u.spd > 0.06){ want = 'walk'; rate = 0.55 + u.spd*1.5; }
-  else if(st.torch) want = 'holding-right';
-  if(u.pickT > 0) want = 'pick-up';
-  if(u.throwT > 0) want = 'attack-melee-right';
-  if(!M.act[want]) want = 'idle';
-
-  if(want !== M.cur){
-    const from = M.act[M.cur], to = M.act[want];
-    if(to){
-      /* Döngülü kliplerde reset() adım fazını sıfıra çekiyor, yani her
-         geçişte bacak döngüsü baştan başlıyordu. Faz korunuyor; yalnız
-         tek seferlik klipler (alma, vurma) başa alınıyor.                  */
-      to.enabled = true;
-      if(to.loop === THREE.LoopOnce){ to.reset(); to.time = 0; }
-      to.setEffectiveWeight(1); to.play();
-      if(from && from !== to) from.crossFadeTo(to, 0.16, false);
-    }
-    M.cur = want;
-  }
-  const a = M.act[M.cur];
-  if(a) a.setEffectiveTimeScale(rate);
-  M.mixer.update(dt);
-
-  /* Bacak kemikleri uzatılınca ayaklar modelin sıfır noktasının altına
-     indi ve karakter zemine gömüldü. Ölçüm ancak iskelet matrisleri
-     güncellendikten sonra doğru çıkıyor, o yüzden karışımın güncellenmesinin
-     hemen ardından bir kez yapılıp gövde o kadar yukarı kaldırılıyor.    */
-  if(M.lift === undefined){
-    k.updateMatrixWorld(true);
-    let lo = Infinity;
-    k.traverse(o => {
-      if(!o.isSkinnedMesh || !o.getVertexPosition) return;
-      const n = o.geometry.attributes.position.count;
-      for(let i = 0; i < n; i++){
-        o.getVertexPosition(i, _lv); o.localToWorld(_lv);
-        if(_lv.y < lo) lo = _lv.y;
-      }
-    });
-    M.lift = isFinite(lo) ? k.position.y - lo : 0;
-    M.body.position.y += M.lift;
-    M.baseY = M.body.position.y;
-  }
-
-  /* yüzerken gövde öne yatar, dalışta daha dik */
-  const b = M.body;
-  const tilt = st.dive ? -1.25 : (st.swim ? -1.1 : (st.fly ? -0.16 : 0));
-  b.rotation.x = lp(b.rotation.x, tilt, dt*6);
-  b.position.y = lp(b.position.y, M.baseY + (st.swim ? 0.26 : 0), dt*6);
-  /* sendeleme */
-  b.rotation.z = lp(b.rotation.z, st.stun > 0 ? Math.sin(st.stun*22)*0.2 : 0, dt*10);
-  /* at kuyruğu: adım temposuna bağlı salınım, havada biraz savruluyor */
-  if(M.tail){
-    M.tt += dt*(3.4 + u.spd*9);
-    const amp = 0.055 + u.spd*0.115;
-    M.tail.rotation.x = lp(M.tail.rotation.x,
-      0.62 - u.spd*0.16 + Math.sin(M.tt)*amp + (st.air ? 0.22 : 0), dt*12);
-    M.tail.rotation.z = lp(M.tail.rotation.z, Math.sin(M.tt*0.62)*amp*0.75, dt*10);
-  }
+  for(const e of opts.extra || []) put(e[0], e[1], e[2], e[3], e[4] === undefined ? 1 : e[4]);
+  const m = new THREE.Mesh(mergeSimple(gs, cs),
+    toon({ vertexColors:true, ramp:RAMP_SKIN, rim:0.16 }));
+  m.castShadow = true;
+  return m;
 }
 
 function makeKid(cfg){
   const G = new THREE.Group();
   const skin = skinMat(cfg.skin), shirt = mkMat(cfg.shirt, 0.92), shortM = mkMat(cfg.short, 0.92);
-  const sleeveM = mkMat(cfg.sleeve || cfg.shirt, 0.92), hair = hairMat(cfg.hair), trim = mkMat(cfg.trim || 0xf6ecd9, 0.88);
+  const sleeveM = mkMat(cfg.sleeve || cfg.shirt, 0.92), hair = hairMat(cfg.hair);
+  const trim = mkMat(cfg.trim || 0xf6ecd9, 0.88), accent = mkMat(cfg.accent || cfg.strap || 0xe06a4a, 0.9);
 
   G.add(contactBlob(0.34));
   const body = new THREE.Group(); G.add(body);
   const hips = new THREE.Group(); hips.position.y = KID.hip; body.add(hips);
 
   /* --- kalça ve şort --- */
-  const shorts = lathe([[0.004,-0.126],[0.100,-0.130],[0.130,-0.096],[0.138,-0.038],[0.136,0.022],[0.122,0.062],[0.004,0.066]], shortM, 20);
-  shorts.scale.z = 0.88; hips.add(shorts);
-  const waist = new THREE.Mesh(new THREE.TorusGeometry(0.120, 0.013, 8, 22), trim);
-  waist.rotation.x = Math.PI/2; waist.position.y = 0.05; waist.scale.z = 0.9; hips.add(waist);
+  /* Şortun beli tişörtün eteğinden geniş kaldığında belde krem bir bant
+     çıkıyor, çocuk etek giymiş gibi duruyordu. Bel daraltıldı: şort
+     tişörtün içine giriyor, dışarıda yalnız kemer bandı kalıyor.        */
+  const shorts = lathe([[0.004,-0.170],[0.112,-0.174],[0.138,-0.120],[0.130,-0.050],[0.117,0.008],[0.004,0.014]], shortM, 22);
+  shorts.scale.z = 0.92; hips.add(shorts);
+  const waist = new THREE.Mesh(new THREE.TorusGeometry(0.119, 0.011, 8, 24), trim);
+  waist.rotation.x = Math.PI/2; waist.position.y = -0.012; waist.scale.z = 0.9; hips.add(waist);
+  /* şortun bağcığı: önde iki kısa uç — küçük ama yakından insan eli değmiş hissi veriyor */
+  for(const sx of [-1, 1]){
+    const str = new THREE.Mesh(new THREE.CapsuleGeometry(0.0045, 0.038, 3, 6), trim);
+    str.position.set(sx*0.016, -0.026, -0.104); str.rotation.set(0.22, 0, sx*0.3);
+    hips.add(str);
+  }
 
   /* --- gövde --- */
   const spine = new THREE.Group(); spine.position.y = KID.spine; hips.add(spine);
   const chest = new THREE.Group(); chest.position.y = KID.chest; spine.add(chest);
-  const torso = lathe([[0.004,-0.142],[0.112,-0.138],[0.130,-0.078],[0.142,-0.008],[0.147,0.058],[0.144,0.112],[0.118,0.152],[0.062,0.170],[0.004,0.173]], shirt, 22);
-  torso.scale.z = 0.80; chest.add(torso);
-  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.053, 0.012, 8, 18), trim);
-  collar.rotation.x = Math.PI/2; collar.position.y = 0.166; collar.scale.z = 0.92; chest.add(collar);
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.044, 0.054, 0.072, 12), skin);
-  neck.position.y = 0.196; chest.add(neck);
+  const TORSO = [[0.004,-0.175],[0.112,-0.171],[0.132,-0.110],[0.141,-0.030],[0.149,0.052],[0.152,0.120],
+                 [0.126,0.168],[0.064,0.190],[0.004,0.193]];
+  const torso = lathe(TORSO, shirt, 24);
+  torso.scale.z = 0.86; chest.add(torso);
+  /* tişörtün enine şeritleri: düz renk gövdeyi kıran tek şey. Yarıçap
+     profilden okunuyor ki kumaş gövdeye yapışık kalsın.                 */
+  const radAt = y => {
+    for(let i = 0; i < TORSO.length - 1; i++){
+      const a = TORSO[i], b = TORSO[i+1];
+      if(y >= a[1] && y <= b[1]) return a[0] + (b[0] - a[0])*(y - a[1])/(b[1] - a[1]);
+    }
+    return TORSO[TORSO.length - 1][0];
+  };
+  for(const [y, h] of [[-0.140, 0.020], [-0.080, 0.014], [-0.026, 0.012]]){
+    const r = radAt(y) + 0.0015;
+    const st = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 24, 1, true), trim);
+    st.position.y = y; st.scale.z = 0.86; chest.add(st);
+  }
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.056, 0.012, 8, 20), trim);
+  collar.rotation.x = Math.PI/2; collar.position.y = 0.187; collar.scale.z = 0.92; chest.add(collar);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.058, 0.066, 14), skin);
+  neck.position.y = 0.212; chest.add(neck);
 
   /* --- baş --- */
   const head = new THREE.Group(); head.position.y = KID.headY; chest.add(head);
   const R = KID.headR;
-  const skull = new THREE.Mesh(new THREE.SphereGeometry(R, 24, 18), skin);
-  skull.scale.set(1, 1.07, 0.98); skull.position.y = 0.018; head.add(skull);
-  const jaw = new THREE.Mesh(new THREE.SphereGeometry(R*0.74, 18, 13), skin);
-  jaw.scale.set(1.02, 0.8, 1.08); jaw.position.set(0, -R*0.4, -R*0.1); head.add(jaw);
-  /* Burun z ekseninde 1,4 kat uzatılıp kafa yüzeyinin 2 cm ötesine
-     taşıyordu: profilden bakınca sivri bir gaga çıkıyor, karakter
-     Pinokyo'ya benziyordu. Artık yüzeyden ancak yarım santim taşan
-     yuvarlak bir düğme.                                              */
-  const nose = new THREE.Mesh(new THREE.SphereGeometry(R*0.17, 12, 9), skin);
-  nose.scale.set(1.0, 0.82, 0.92); nose.position.set(0, -R*0.12, -R*0.88); head.add(nose);
-  const lids = [];
-  for(const s of [-1, 1]){
-    const e = new THREE.Group(); e.position.set(s*R*0.38, R*0.13, -R*0.78); head.add(e);
-    const w = new THREE.Mesh(new THREE.SphereGeometry(R*0.27, 14, 10), EYE_W);
-    w.scale.set(1, 1.04, 0.48); e.add(w);
-    const ir = new THREE.Mesh(new THREE.SphereGeometry(R*0.15, 12, 9), EYE_D);
-    ir.scale.z = 0.62; ir.position.z = -R*0.12; e.add(ir);
-    const gl = new THREE.Mesh(new THREE.SphereGeometry(R*0.042, 6, 5), GLINT);
-    gl.position.set(-s*R*0.06, R*0.07, -R*0.2); e.add(gl);
-    const lid = new THREE.Mesh(new THREE.SphereGeometry(R*0.29, 14, 8, 0, 6.283, 0, 1.3), skin);
-    lid.scale.set(1, 0.92, 0.56); lid.position.y = R*0.1; lid.rotation.x = 1.35; e.add(lid);
-    lids.push(lid);
-    const br = new THREE.Mesh(new THREE.CapsuleGeometry(R*0.028, R*0.24, 3, 6), hair);
-    br.position.set(s*R*0.4, R*0.52, -R*0.86); br.rotation.set(0, 0, Math.PI/2 + s*0.14); head.add(br);
-    const ear = new THREE.Mesh(new THREE.SphereGeometry(R*0.27, 12, 9), skin);
-    ear.scale.set(0.38, 1, 0.72); ear.position.set(s*R*0.95, -R*0.04, R*0.03); head.add(ear);
-    const cheek = new THREE.Mesh(new THREE.SphereGeometry(R*0.26, 10, 8), mkMat(0xdd9170, 0.95));
-    cheek.scale.set(1, 0.72, 0.28); cheek.position.set(s*R*0.6, -R*0.22, -R*0.72);
-    cheek.material.transparent = true; cheek.material.opacity = 0.16; head.add(cheek);
+  const faceOpen = faceTex(cfg, false), faceShut = faceTex(cfg, true);
+  const faceM = toon({ map:faceOpen, ramp:RAMP_SKIN, rim:0.2 });
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(R, 44, 30), faceM);
+  skull.scale.set(1, 1.07, 0.97); skull.position.y = 0.006; head.add(skull);
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(R*0.145, 12, 9), skin);
+  nose.scale.set(1.0, 0.88, 0.88); nose.position.set(0, -R*0.14, -R*0.90); head.add(nose);
+  for(const sx of [-1, 1]){
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(R*0.25, 12, 9), skin);
+    ear.scale.set(0.36, 1, 0.76); ear.position.set(sx*R*0.96, -R*0.04, R*0.03); head.add(ear);
   }
-  const mouth = new THREE.Mesh(new THREE.TorusGeometry(R*0.2, 0.0042, 6, 14, Math.PI*0.85), mkMat(0xbd7261, 0.7));
-  mouth.position.set(0, -R*0.55, -R*0.82); mouth.rotation.set(1.42, 0, Math.PI + 0.43); head.add(mouth);
 
-  /* --- saç, şapka, at kuyruğu --- */
+  /* --- saç --- */
   const tailG = new THREE.Group();
-  if(cfg.cap){
-    const fringe = new THREE.Mesh(new THREE.SphereGeometry(R*0.96, 16, 12, 0, 6.283, 0, 1.0), hair);
-    fringe.scale.set(1.02, 0.88, 1.02); fringe.position.y = R*0.22; head.add(fringe);
-    const nape = new THREE.Mesh(new THREE.SphereGeometry(R*0.8, 14, 10), hair);
-    nape.scale.set(1.08, 0.58, 0.72); nape.position.set(0, -R*0.38, R*0.48); head.add(nape);
-    const capM = mkMat(cfg.cap, 0.88);
-    const crown = new THREE.Mesh(new THREE.SphereGeometry(R*1.13, 24, 16, 0, 6.283, 0, 1.16), capM);
-    crown.scale.set(1, 1.0, 1.02); crown.position.y = R*0.24; head.add(crown);
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(R*1.125, R*1.125, R*0.3, 24, 1, true), capM);
-    band.position.y = R*0.58; band.scale.z = 1.02; head.add(band);
-    const brim = new THREE.Mesh(new THREE.CylinderGeometry(R*1.25, R*1.25, 0.013, 28, 1, false, Math.PI*0.66, Math.PI*0.68), capM);
-    brim.position.set(0, R*0.42, -R*0.24); brim.scale.z = 1.12; brim.rotation.x = -0.2; head.add(brim);
-    const btn = new THREE.Mesh(new THREE.SphereGeometry(R*0.12, 10, 8), capM);
-    btn.position.y = R*1.3; head.add(btn);
-  } else {
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(R*1.1, 22, 16, 0, 6.283, 0, 1.2), hair);
-    cap.scale.set(1.0, 1.04, 1.02); cap.position.y = R*0.16; head.add(cap);
-    const back = new THREE.Mesh(new THREE.SphereGeometry(R*1.06, 18, 13, 0, 6.283, 0.85, 0.95), hair);
-    back.scale.set(1.0, 1.1, 0.78); back.position.set(0, R*0.12, R*0.26); head.add(back);
+  if(cfg.curly){
+    /* Ali: kıvırcık. Altta kafayı saran koyu bir kapak var ki kümelerin
+       arasından ten görünmesin; hacim kümelerden geliyor.               */
+    const capBase = new THREE.Mesh(new THREE.SphereGeometry(R*0.99, 20, 14, 0, 6.283, 0, 0.92), hair);
+    capBase.scale.set(1.02, 1.06, 1.0); capBase.position.y = R*0.04; head.add(capBase);
+    const nape = new THREE.Mesh(new THREE.SphereGeometry(R*0.9, 16, 12, 0, 6.283, 0.7, 1.0), hair);
+    nape.scale.set(1.05, 1.1, 0.8); nape.position.set(0, R*0.02, R*0.26); head.add(nape);
+    head.add(hairClump({
+      seed:7, color:cfg.hair, R:R*1.02, y:R*0.04, n:140, cover:1.46, hairline:0.52,
+      r0:R*0.105, r1:R*0.075,
+      extra:[[0, -R*0.18, R*0.86, R*0.2, 0.92], [-R*0.56, -R*0.26, R*0.66, R*0.18, 0.88],
+             [R*0.58, -R*0.24, R*0.68, R*0.18, 0.9],
+             [-R*0.86, R*0.2, R*0.18, R*0.17, 0.95], [R*0.88, R*0.18, R*0.2, R*0.17, 0.95]],
+    }));
+  }else{
+    /* Alya: katmanlı kısa saç + yüksek at kuyruğu */
+    const capM = hair;
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(R*1.05, 24, 17, 0, 6.283, 0, 1.24), capM);
+    cap.scale.set(1.01, 1.06, 1.03); cap.position.y = R*0.11; head.add(cap);
+    const back = new THREE.Mesh(new THREE.SphereGeometry(R*1.0, 18, 13, 0, 6.283, 0.8, 1.05), capM);
+    back.scale.set(1.02, 1.12, 0.84); back.position.set(0, R*0.1, R*0.2); head.add(back);
+    /* kâkül: alnın üstünde yana taralı bir dilim */
+    const fringe = new THREE.Mesh(new THREE.SphereGeometry(R*1.06, 20, 12, Math.PI*0.86, Math.PI*0.78, 0.12, 0.86), capM);
+    fringe.scale.set(1.02, 1.0, 1.04); fringe.position.set(R*0.05, R*0.1, 0); fringe.rotation.z = 0.12; head.add(fringe);
     for(const sx of [-1, 1]){
-      const side = new THREE.Mesh(new THREE.SphereGeometry(R*0.46, 12, 10), hair);
-      side.scale.set(0.58, 1.5, 0.8); side.position.set(sx*R*0.92, -R*0.26, R*0.1); head.add(side);
+      const side = new THREE.Mesh(new THREE.SphereGeometry(R*0.42, 12, 10), capM);
+      side.scale.set(0.6, 1.62, 0.84); side.position.set(sx*R*0.9, -R*0.3, R*0.06); head.add(side);
     }
     head.add(tailG);
-    tailG.position.set(0, 0, R*0.95);
-    const band = new THREE.Mesh(new THREE.TorusGeometry(R*0.34, 0.012, 8, 16), mkMat(cfg.band || 0xefb455, 0.6));
+    tailG.position.set(0, R*0.30, R*0.82);
+    const band = new THREE.Mesh(new THREE.TorusGeometry(R*0.32, 0.013, 8, 18), mkMat(cfg.band || 0xefb455, 0.6));
     band.rotation.y = Math.PI/2; tailG.add(band);
     let par = tailG;
     for(let i = 0; i < 3; i++){
-      const seg = new THREE.Group(); seg.position.y = i ? -0.062 : -0.012; par.add(seg);
-      seg.add(bone(R*0.32 - i*0.008, R*0.25 - i*0.008, 0.066, hair));
+      const seg = new THREE.Group(); seg.position.y = i ? -0.060 : -0.014; par.add(seg);
+      seg.add(bone(R*0.33 - i*0.009, R*0.26 - i*0.009, 0.064, hair));
       par = seg; tailG.userData['s' + i] = seg;
     }
     tailG.rotation.x = -0.45;
@@ -3767,23 +3560,31 @@ function makeKid(cfg){
   /* --- kollar --- */
   const arm = s => {
     const root = new THREE.Group(); root.position.set(s*KID.shoulderX, KID.shoulderY, 0); chest.add(root);
-    const L = limbSkin(0.050, 0.044, 0.034, KID.upperArm, KID.foreArm, skin);
+    const L = limbSkin(0.055, 0.048, 0.037, KID.upperArm, KID.foreArm, skin);
     root.add(L.mesh);
     /* tişört kolu: omuzdan aşağı hafif açılan kumaş, üstü yuvarlak kapalı */
-    const slv = lathe([[0.002,0.058],[0.034,0.068],[0.052,0.048],[0.057,-0.012],[0.058,-0.082],
-                       [0.054,-0.134],[0.002,-0.138]], sleeveM, 16);
+    const slv = lathe([[0.002,0.072],[0.040,0.080],[0.060,0.056],[0.065,-0.008],[0.066,-0.078],
+                       [0.061,-0.130],[0.002,-0.134]], sleeveM, 18);
     slv.scale.z = 0.94; L.up.add(slv);
-    const hand = makeHand(skin, s); hand.position.y = -KID.foreArm - 0.004; L.lo.add(hand);
+    const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.060, 0.008, 7, 18), trim);
+    cuff.rotation.x = Math.PI/2; cuff.position.y = -0.128; cuff.scale.z = 0.94; L.up.add(cuff);
+    const hand = makeHand(skin, s); hand.position.y = -KID.foreArm - 0.002; hand.scale.setScalar(0.9); L.lo.add(hand);
     return { g: L.up, lo: L.lo, hand };
   };
   /* --- bacaklar: uyluk başı şortun içinde kalır --- */
   const leg = s => {
-    const root = new THREE.Group(); root.position.set(s*0.074, -0.04, 0); hips.add(root);
-    const L = limbSkin(0.068, 0.058, 0.040, KID.thigh, KID.shin, skin);
+    const root = new THREE.Group(); root.position.set(s*0.076, -0.038, 0); hips.add(root);
+    const L = limbSkin(0.075, 0.065, 0.044, KID.thigh, KID.shin, skin);
     root.add(L.mesh);
     const g = L.up, lo = L.lo;
-    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.086, 0.078, 0.120, 16), shortM);
-    cuff.position.y = -0.048; cuff.scale.z = 0.95; g.add(cuff);
+    /* Paça silindirdi: alt kenarı jiletle kesilmiş gibi duruyor, bacak
+       mukavva kutudan çıkıyordu. Uçları yuvarlak konik gövde kumaşın
+       bacağı sardığı hissini veriyor.                                   */
+    const cuff = bone(0.097, 0.084, 0.158, shortM);
+    cuff.position.y = -0.018; cuff.scale.z = 0.96; g.add(cuff);
+    /* çorap: ayakkabının üstünden çıkan kısa bir bilezik */
+    const sock = new THREE.Mesh(new THREE.CylinderGeometry(0.044, 0.042, 0.052, 14), trim);
+    sock.position.y = -KID.shin + 0.030; lo.add(sock);
     const foot = new THREE.Group(); foot.position.y = -KID.shin; lo.add(foot);
     /* spor ayakkabı: taban, burun kapağı, bilek yakası, bağcık */
     const shoeM = mkMat(cfg.shoe || 0xf2efe6, 0.78), soleM = mkMat(cfg.sole || 0xe2ded3, 0.95);
@@ -3799,53 +3600,62 @@ function makeKid(cfg){
       const lace = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.006, 0.008), mkMat(cfg.lace || 0xcfc6b4, 0.9));
       lace.position.set(0, 0.051 - i*0.010, -0.014 - i*0.026); lace.rotation.x = 0.2; foot.add(lace);
     }
-    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.039, 0.010, 7, 14), shoeM);
-    collar.rotation.x = Math.PI/2 - 0.2; collar.position.set(0, 0.050, 0.014); collar.scale.set(1.1, 1, 0.9); foot.add(collar);
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.026, 0.062), mkMat(cfg.strap || 0x3ad0c4, 0.8));
+    const collar2 = new THREE.Mesh(new THREE.TorusGeometry(0.039, 0.010, 7, 14), shoeM);
+    collar2.rotation.x = Math.PI/2 - 0.2; collar2.position.set(0, 0.050, 0.014); collar2.scale.set(1.1, 1, 0.9); foot.add(collar2);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.026, 0.062), accent);
     stripe.position.set(0.044, 0.016, -0.036); stripe.rotation.z = 0.2; foot.add(stripe);
     const stripe2 = stripe.clone(); stripe2.position.x = -0.044; stripe2.rotation.z = -0.2; foot.add(stripe2);
     return { g, lo, foot };
   };
   const armL = arm(-1), armR = arm(1), legL = leg(-1), legR = leg(1);
 
-  /* --- sırt çantası: hep takılı; file çanta alınınca yanına ganimet filesi gelir --- */
+  /* --- omuz çantası ---------------------------------------------------
+     Önce sırt çantasıydı; oyuncu karakteri neredeyse hep arkadan
+     gördüğü için çanta bütün sırtı kapatıyor, kıyafet hiç görünmüyordu.
+     Askı göğsü çaprazlıyor, kese kalçanın yanında duruyor: siluete
+     kırık veriyor ama sırtı boş bırakıyor.                              */
   const packM = mkMat(cfg.pack || 0x3f6b52, 0.92), packD = mkMat(cfg.packD || 0x2f5240, 0.92);
-  const day = new THREE.Group(); day.position.set(0, 0.018, 0.092); day.scale.setScalar(1.18); chest.add(day);
-  const sack = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 14), packM);
-  sack.scale.set(0.105, 0.135, 0.058); day.add(sack);
-  const flap = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 12, 0, 6.283, 0, 1.1), packD);
-  flap.scale.set(0.108, 0.1, 0.062); flap.position.y = 0.055; day.add(flap);
-  const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.016, 0.01), mkMat(cfg.trim || 0xf6ecd9, 0.6));
-  buckle.position.set(0, 0.012, -0.055); day.add(buckle);
-  const pocket = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 9), packD);
-  pocket.scale.set(0.034, 0.05, 0.03); pocket.position.set(0.095, -0.02, 0.01); day.add(pocket);
-  const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.07, 10), mkMat(0x6fc4d6, 0.5));
-  bottle.position.set(0.095, 0.035, 0.01); day.add(bottle);
-  for(const sx of [-1, 1]){
-    const strap = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.011, 8, 18, Math.PI*0.95), packD);
-    strap.position.set(sx*0.062, 0.04, -0.015);
-    strap.rotation.set(0.12, sx*0.55, 0); day.add(strap);
+  const day = new THREE.Group(); chest.add(day);
+  /* Askı tek omuzdan geçiyor: öndeki ve arkadaki parça aynı yöne
+     yatmalı. Ters yatınca iki ayrı kayış gibi duruyordu.              */
+  for(const z of [-0.132, 0.128]){
+    const belt = new THREE.Mesh(new THREE.BoxGeometry(0.021, 0.34, 0.009), packD);
+    belt.position.set(0.004, 0.012, z); belt.rotation.set(0, 0, 0.40);
+    day.add(belt);
   }
+  const sh = new THREE.Mesh(new THREE.SphereGeometry(0.030, 10, 8), packD);
+  sh.scale.set(0.80, 0.42, 1.7); sh.position.set(-0.074, 0.150, -0.006); day.add(sh);
+  const kese = new THREE.Group(); kese.position.set(0.146, -0.150, 0.050); kese.rotation.y = -0.14; day.add(kese);
+  const bag = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), packM);
+  bag.scale.set(0.048, 0.082, 0.104); kese.add(bag);
+  const flap = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10, 0, 6.283, 0, 1.15), packD);
+  flap.scale.set(0.051, 0.062, 0.108); flap.position.y = 0.030; kese.add(flap);
+  const buck = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.020, 0.026), trim);
+  buck.position.set(-0.044, 0.006, 0); kese.add(buck);
+  const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.066, 10), mkMat(0x6fc4d6, 0.5));
+  bottle.position.set(0.010, 0.064, 0.070); bottle.rotation.z = -0.16; kese.add(bottle);
 
-  /* --- file çanta (yükseltme) --- */
-  const pack = new THREE.Group(); pack.position.set(0.12, -0.08, 0.02); chest.add(pack);
-  const net = new THREE.Mesh(new THREE.SphereGeometry(0.085, 14, 11), mkMat(0x87b196, 0.95));
-  net.scale.set(1, 1.2, 0.8); pack.add(net);
+  /* --- file çanta (yükseltme): diğer kalçada --- */
+  const pack = new THREE.Group(); pack.position.set(-0.118, -0.10, 0.03); chest.add(pack);
+  const net = new THREE.Mesh(new THREE.SphereGeometry(0.075, 14, 11), mkMat(0x87b196, 0.95));
+  net.scale.set(0.85, 1.2, 0.85); pack.add(net);
   for(let i = 0; i < 3; i++){
-    const r = new THREE.Mesh(new THREE.TorusGeometry(0.078 - i*0.012, 0.004, 6, 16), mkMat(0x5d8c72, 0.9));
-    r.rotation.x = Math.PI/2; r.position.y = -0.04 + i*0.04; r.scale.z = 0.8; pack.add(r);
+    const r = new THREE.Mesh(new THREE.TorusGeometry(0.070 - i*0.011, 0.004, 6, 16), mkMat(0x5d8c72, 0.9));
+    r.rotation.x = Math.PI/2; r.position.y = -0.034 + i*0.036; r.scale.set(0.85, 1, 0.85); pack.add(r);
   }
-  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.006, 6, 14, Math.PI), mkMat(0x5d8c72, 0.9));
-  handle.position.y = 0.09; pack.add(handle);
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.046, 0.006, 6, 14, Math.PI), mkMat(0x5d8c72, 0.9));
+  handle.position.y = 0.082; pack.add(handle);
   pack.visible = false;
 
   G.traverse(o => { if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
   G.children[0].castShadow = false; G.children[0].receiveShadow = false;
   G.scale.setScalar(cfg.scale || 1);
-  G.userData = { body, hips, spine, chest, head, lids, armL, armR, legL, legR, pack, day, tail:tailG,
+  G.userData = { body, hips, spine, chest, head, face:{ m:faceM, open:faceOpen, shut:faceShut },
+                 armL, armR, legL, legR, pack, day, tail:tailG,
                  ph:0, spd:0, blink:2, blinkT:0, throwT:0, sway:0, tailV:0, tailA:0, cfg };
   return G;
 }
+
 
 /* ---- animasyon ----
    Yürüyüş/koşu dört evreye göre kurgulanır: basış, çökme, geçiş, itiş.
@@ -3856,7 +3666,6 @@ const pos = v => Math.max(0, v);
 
 function animKid(k, s, dt){
   const u = k.userData;
-  if(u.mini){ animMini(k, s, dt); return; }
   u.spd = lp(u.spd, Math.min(1, s.spd), dt*9);
   const spd = u.spd, run = Math.max(0, spd - 0.62)/0.38;
   u.ph += dt*(s.swim ? 4.6 : (3.2 + spd*7.6));
@@ -3868,9 +3677,36 @@ function animKid(k, s, dt){
     u.blink -= dt;
     if(u.blink <= 0){ u.blink = 2.6 + rand()*4.2; u.blinkT = 0.12; }
   }
-  for(const l of u.lids) l.rotation.x = lp(l.rotation.x, u.blinkT > 0 ? -0.15 : 1.35, dt*22);
+  u.face.m.map = u.blinkT > 0 ? u.face.shut : u.face.open;
 
-  if(s.swim){
+  if(s.fly){
+    /* Süpürgede yan oturuş. Gövde süpürgenin üstünde doksan derece
+       çevrili geliyor; burada yalnız oturma pozu veriliyor, baş uçuş
+       yönüne dönüyor.                                                  */
+    u.body.rotation.x = lp(u.body.rotation.x, -0.08, dt*5);
+    u.body.rotation.z = lp(u.body.rotation.z, 0, dt*6);
+    u.body.position.y = lp(u.body.position.y, 0, dt*5);
+    u.hips.position.y = lp(u.hips.position.y, KID.hip - 0.015, dt*5);
+    u.hips.rotation.z = lp(u.hips.rotation.z, 0, dt*6);
+    u.hips.rotation.y = lp(u.hips.rotation.y, 0.12, dt*5);
+    u.chest.rotation.y = lp(u.chest.rotation.y, 0.18, dt*5);
+    const kick = Math.sin(u.ph*0.7)*0.10;
+    u.legL.g.rotation.x = lp(u.legL.g.rotation.x, 1.22 + kick, dt*7);
+    u.legR.g.rotation.x = lp(u.legR.g.rotation.x, 1.34 - kick, dt*7);
+    u.legL.lo.rotation.x = lp(u.legL.lo.rotation.x, -1.0 + kick, dt*7);
+    u.legR.lo.rotation.x = lp(u.legR.lo.rotation.x, -1.18 - kick, dt*7);
+    u.legL.foot.rotation.x = lp(u.legL.foot.rotation.x, 0.3, dt*7);
+    u.legR.foot.rotation.x = lp(u.legR.foot.rotation.x, 0.34, dt*7);
+    u.armL.g.rotation.x = lp(u.armL.g.rotation.x, 0.46, dt*6);
+    u.armR.g.rotation.x = lp(u.armR.g.rotation.x, 0.30, dt*6);
+    u.armL.g.rotation.z = lp(u.armL.g.rotation.z, -0.26, dt*6);
+    u.armR.g.rotation.z = lp(u.armR.g.rotation.z, 0.30, dt*6);
+    u.armL.lo.rotation.x = lp(u.armL.lo.rotation.x, 0.55, dt*6);
+    u.armR.lo.rotation.x = lp(u.armR.lo.rotation.x, 0.70, dt*6);
+    u.head.rotation.y = lp(u.head.rotation.y, -0.95, dt*4);
+    u.head.rotation.x = lp(u.head.rotation.x, 0.06, dt*5);
+    u.head.rotation.z = lp(u.head.rotation.z, 0.05, dt*5);
+  } else if(s.swim){
     const dive = s.dive;
     u.body.rotation.x = lp(u.body.rotation.x, dive ? -1.52 : -1.34, dt*4);
     u.body.position.y = lp(u.body.position.y, dive ? 0.3 : 0.2, dt*4);
@@ -4004,17 +3840,17 @@ function animKid(k, s, dt){
   }
 }
 
-const ALI_CFG  = { skin:0xe3ab80, shirt:0x3f86b4, sleeve:0x356f96, short:0x27455a, hair:0x2a1f16,
-                   shoe:0xf2efe6, sole:0xdcd7c9, strap:0x3f86b4, lace:0xcfc6b4, cap:0xf4705a, trim:0xf6ecd9,
-                   pack:0x3f6b52, packD:0x2d5240, scale:1.0, who:'ali' };
-const ALYA_CFG = { skin:0xf0c49c, shirt:0xf4705a, sleeve:0xe06552, short:0x3ad0c4, hair:0x4a2f1e,
-                   shoe:0xfbf5e8, sole:0xe6ddc9, strap:0xf4705a, lace:0xe9c47f, band:0xefb455, trim:0xffe3b0,
-                   pack:0xe0785f, packD:0xb95844, scale:0.965, who:'alya' };
-/* model yüklendiyse hazır karakter, yüklenemediyse eski elle çizilmiş gövde */
-const KIDS = {
-  ali:  PROP.kid.kidA ? makeMini(PROP.kid.kidA, ALI_CFG)  : makeKid(ALI_CFG),
-  alya: PROP.kid.kidB ? makeMini(PROP.kid.kidB, ALYA_CFG) : makeKid(ALYA_CFG),
-};
+/* Paletler birbirinden ayrışsın ama aynı yazdan olsunlar: Ali deniz
+   mavisi ve kum, Alya mercan ve çam yeşili. Krem şerit ikisinde ortak. */
+const ALI_CFG  = { skin:0xdf9f71, shirt:0x2f7b96, sleeve:0x27697f, short:0xa08659, hair:0x2b1d14,
+                   shoe:0xf2efe6, sole:0xd9d2c2, accent:0xe06a4a, lace:0xc9bfa8, trim:0xf3ece0,
+                   eye:0x4a3220, blush:0xc8724e, curly:true,
+                   pack:0xb0603c, packD:0x8a492c, scale:1.0, who:'ali' };
+const ALYA_CFG = { skin:0xf1c296, shirt:0xe8705c, sleeve:0xd5614f, short:0x2f6f7a, hair:0x4a2f1e,
+                   shoe:0xfbf5e8, sole:0xe6ddc9, accent:0x2f6f7a, lace:0xe9c47f, band:0xf2c05a, trim:0xfdf3e3,
+                   eye:0x3c4a38, blush:0xdd8f72,
+                   pack:0x6f9a7a, packD:0x4e7a5c, scale:0.965, who:'alya' };
+const KIDS = { ali:makeKid(ALI_CFG), alya:makeKid(ALYA_CFG) };
 KIDS.ali.name = 'Ali'; KIDS.alya.name = 'Alya';
 scene.add(KIDS.ali, KIDS.alya);
 
@@ -4501,7 +4337,6 @@ const LIFE_R = 108;                      /* bu kadar yakındakiler canlı */
 function makeVillager(cfg){
   const G = new THREE.Group();
   const skin = skinMat(cfg.skin), top = mkMat(cfg.top, 0.9), bot = mkMat(cfg.bot, 0.9);
-  const hair = hairMat(cfg.hair || 0x3a2b20);
   G.add(contactBlob(0.38));
   const body = new THREE.Group(); body.name = 'body'; G.add(body);
   const hips = new THREE.Group(); hips.position.y = 0.80; hips.name = 'hips'; body.add(hips);
@@ -4510,55 +4345,71 @@ function makeVillager(cfg){
   for(const sx of [-1, 1]){
     const g = new THREE.Group(); g.position.set(sx*0.098, 0, 0); hips.add(g);
     g.name = sx < 0 ? 'legL' : 'legR';
-    const up = new THREE.Mesh(new THREE.BoxGeometry(0.152, 0.46, 0.17), cfg.dress ? skin : bot);
-    up.position.y = -0.23; g.add(up);
+    g.add(bone(0.088, 0.070, 0.46, cfg.dress ? skin : bot));
     const lo = new THREE.Group(); lo.position.y = -0.46; g.add(lo);
     lo.name = g.name + 'lo';
-    const sh = new THREE.Mesh(new THREE.BoxGeometry(0.158, 0.34, 0.20), skin);
-    sh.position.set(0, -0.17, 0.014); lo.add(sh);
-    const ft = new THREE.Mesh(new THREE.BoxGeometry(0.166, 0.072, 0.264), mkMat(cfg.shoe || 0x4a4038, 0.9));
-    ft.position.set(0, -0.336, -0.03); lo.add(ft);
+    lo.add(bone(0.072, 0.050, 0.34, skin));
+    const ft = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 9), mkMat(cfg.shoe || 0x4a4038, 0.9));
+    ft.scale.set(0.078, 0.042, 0.128); ft.position.set(0, -0.330, -0.036); lo.add(ft);
     legs.push({ g, lo });
   }
   const chest = new THREE.Group(); chest.position.y = 0.02; chest.name = 'chest'; hips.add(chest);
   if(cfg.dress){
-    const sk = new THREE.Mesh(new THREE.CylinderGeometry(0.168, 0.262, 0.52, 12), top);
-    sk.position.y = -0.24; chest.add(sk);
+    const sk = lathe([[0.006,-0.50],[0.258,-0.495],[0.236,-0.34],[0.196,-0.14],[0.172,0.02],[0.006,0.03]], top, 16);
+    chest.add(sk);
   }
-  const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.33, 0.46, 0.21), top);
-  trunk.position.y = 0.22; chest.add(trunk);
+  /* Gövde kutuydu: uzaktan omuz çizgisi dümdüz çıkıyor, köyde herkes
+     aynı tahta blok gibi duruyordu. Dönel profil omuzda yuvarlanıp
+     belde daralıyor; üçgen sayısı artsa da çizim sayısı aynı.          */
+  const trunk = lathe([[0.006,0.0],[0.150,0.012],[0.168,0.10],[0.172,0.24],[0.166,0.34],
+                       [0.138,0.42],[0.074,0.452],[0.006,0.456]], top, 16);
+  trunk.scale.z = 0.76; trunk.position.y = 0.006; chest.add(trunk);
   const arms = [];
   for(const sx of [-1, 1]){
-    const g = new THREE.Group(); g.position.set(sx*0.205, 0.40, 0); chest.add(g);
+    const g = new THREE.Group(); g.position.set(sx*0.188, 0.40, 0); chest.add(g);
     g.name = sx < 0 ? 'armL' : 'armR';
-    const up = new THREE.Mesh(new THREE.BoxGeometry(0.106, 0.28, 0.122), cfg.bare ? skin : top);
-    up.position.y = -0.14; g.add(up);
+    g.add(bone(0.060, 0.047, 0.28, cfg.bare ? skin : top));
     const lo = new THREE.Group(); lo.position.y = -0.28; g.add(lo);
     lo.name = g.name + 'lo';
-    const fa = new THREE.Mesh(new THREE.BoxGeometry(0.098, 0.30, 0.112), skin);
-    fa.position.y = -0.15; lo.add(fa);
+    lo.add(bone(0.048, 0.036, 0.26, skin));
+    const hd = new THREE.Mesh(new THREE.SphereGeometry(0.046, 10, 8), skin);
+    hd.scale.set(0.92, 1.1, 0.68); hd.position.y = -0.296; lo.add(hd);
     arms.push({ g, lo });
   }
   const head = new THREE.Group(); head.position.y = 0.52; head.name = 'head'; chest.add(head);
-  /* Baş rijit: dokuz ayrı kutu dokuz çizim demekti. Hepsi tek geometride
-     birleştirilip köşe rengiyle boyanıyor -- sakin başına sekiz çizim
-     daha az.                                                            */
+  /* Baş tek geometri: kafa, saç, kulak ve yüz tek çizimde gidiyor —
+     yetmiş köylü için fark büyük. Küre ve dönel parçalar kutuların
+     yerini aldı; köşe rengi hangi parçanın ne olduğunu taşıyor.        */
   {
     const gs = [], cs = [];
-    const put = (g, x, y, z, col) => { g.translate(x, y, z); gs.push(g); cs.push(new THREE.Color(col)); };
-    put(new THREE.BoxGeometry(0.246, 0.254, 0.236), 0, 0.112, 0, cfg.skin);
+    const put = (g, x, y, z, col, sc) => {
+      if(sc) g.scale(sc[0], sc[1], sc[2]);
+      g.translate(x, y, z); gs.push(g); cs.push(new THREE.Color(col));
+    };
+    const HAIR = cfg.hair || 0x3a2b20;
+    put(new THREE.SphereGeometry(0.126, 16, 12), 0, 0.126, 0, cfg.skin, [1, 1.07, 0.96]);
+    put(new THREE.SphereGeometry(0.022, 8, 6), 0, 0.100, -0.118, cfg.skin, [1, 0.9, 0.9]);
     for(const sx of [-1, 1]){
-      put(new THREE.BoxGeometry(0.042, 0.05, 0.016), sx*0.056, 0.118, -0.122, 0x1d1a16);
-      put(new THREE.BoxGeometry(0.024, 0.07, 0.07), sx*0.13, 0.102, 0.004, cfg.skin);
+      put(new THREE.SphereGeometry(0.030, 8, 6), sx*0.122, 0.112, 0.008, cfg.skin, [0.4, 1, 0.78]);
+      put(new THREE.SphereGeometry(0.024, 9, 7), sx*0.052, 0.140, -0.108, 0x1d1a16, [1, 1.05, 0.42]);
+      put(new THREE.SphereGeometry(0.0075, 5, 4), sx*0.045, 0.150, -0.118, 0xf6f2ea);
+      put(new THREE.BoxGeometry(0.046, 0.011, 0.012), sx*0.054, 0.178, -0.106, HAIR);
     }
+    const mg = new THREE.TorusGeometry(0.030, 0.0048, 5, 10, Math.PI*0.8);
+    mg.rotateX(1.45); mg.rotateZ(Math.PI + 0.45);
+    put(mg, 0, 0.074, -0.108, 0x9c5543);
     if(cfg.scarf){
-      put(new THREE.BoxGeometry(0.268, 0.228, 0.262), 0, 0.136, 0.018, cfg.scarf);
-      put(new THREE.BoxGeometry(0.272, 0.08, 0.052), 0, 0.198, -0.114, cfg.scarf);
+      /* başörtüsü: yüz açıklığı bırakan küre dilimi + ensede düğüm */
+      const F = Math.PI*1.5;
+      put(new THREE.SphereGeometry(0.136, 18, 13, F + 0.60, 6.283 - 1.20, 0, 2.05), 0, 0.132, 0.008, cfg.scarf);
+      put(new THREE.SphereGeometry(0.136, 14, 9, F - 0.70, 1.40, 0, 0.74), 0, 0.132, 0.008, cfg.scarf);
+      put(new THREE.SphereGeometry(0.046, 10, 8), 0, 0.060, 0.104, cfg.scarf, [1.2, 0.8, 1]);
     }else{
-      put(new THREE.BoxGeometry(0.258, 0.11, 0.248), 0, 0.198, 0.008, cfg.hair || 0x3a2b20);
+      put(new THREE.SphereGeometry(0.130, 16, 11, 0, 6.283, 0, 1.06), 0, 0.136, 0.004, HAIR, [1.02, 1.02, 1.0]);
+      put(new THREE.SphereGeometry(0.112, 12, 9, 0, 6.283, 0.9, 0.9), 0, 0.118, 0.034, HAIR, [1.04, 1.1, 0.86]);
       if(cfg.hat){
-        put(new THREE.CylinderGeometry(0.106, 0.118, 0.1, 12), 0, 0.272, 0, cfg.hat);
-        put(new THREE.CylinderGeometry(0.212, 0.212, 0.018, 14), 0, 0.226, 0, cfg.hat);
+        put(new THREE.SphereGeometry(0.134, 16, 10, 0, 6.283, 0, 1.0), 0, 0.166, 0, cfg.hat, [1, 0.84, 1]);
+        put(new THREE.CylinderGeometry(0.212, 0.212, 0.016, 16), 0, 0.212, 0, cfg.hat);
       }
     }
     head.add(new THREE.Mesh(mergeSimple(gs, cs), toon({ vertexColors:true, ramp:RAMP_SKIN, rim:0.2 })));
@@ -5100,29 +4951,38 @@ const ICON = { kabuk:'shell', salyangoz:'snail', tas:'stone', mineral:'mineral',
 const GEAR_ICON = { fener:'torch', caki:'knife', gozluk:'goggles', palet:'fins', file:'bag', kese:'pouch' };
 const hex = c => '#' + c.toString(16).padStart(6, '0');
 
-/* elle çizilmiş portreler — madalyon ve karakter seçimi için */
+/* elle çizilmiş portreler — madalyon ve karakter seçimi için.
+   Renkler sahadaki gövdelerin yapılandırmasıyla aynı; madalyondaki
+   çocukla koşan çocuk aynı kişi olsun diye.                           */
 function portrait(who){
   const A = who === 'ali';
-  /* Renkler 3B modellerin kendi doku atlasından okundu; madalyondaki
-     çocukla sahadaki çocuk aynı görünsün diye.                         */
-  const skin = A ? '#a55d41' : '#e9b28c', hair = A ? '#43434c' : '#e78f65';
-  const shirt = A ? '#3aa378' : '#ffd061', cap = '#f4705a', band = '#efb455';
+  const skin = A ? '#df9f71' : '#f1c296', hair = A ? '#2b1d14' : '#4a2f1e';
+  const shirt = A ? '#2f7b96' : '#e8705c', trim = A ? '#f3ece0' : '#fdf3e3';
+  const band = '#f2c05a';
+  /* Ali'nin bukleleri: saç çizgisi boyunca dizilen daireler */
+  const curls = A ? [[16,24,5.4],[22,18.5,5.8],[29,15.6,6.1],[36,15.8,6.0],[43,18.8,5.6],
+                     [48,24.5,5.2],[19,31,4.6],[46,31,4.6],[26,12.6,4.4],[39,12.8,4.4],
+                     [32,10.8,4.2],[13,29,4.0],[51,29.5,4.0]]
+                  .map(c => `<circle cx="${c[0]}" cy="${c[1]}" r="${c[2]}" fill="${hair}"/>`).join('') : '';
   return `<svg viewBox="0 0 64 64">
     <circle cx="32" cy="32" r="32" fill="#092734"/>
     <path d="M6 64c2-13 12-19 26-19s24 6 26 19z" fill="${shirt}"/>
-    ${A ? '' : `<ellipse cx="32" cy="36" rx="19" ry="21" fill="${hair}"/>`}
-    <ellipse cx="32" cy="34" rx="15" ry="17" fill="${skin}"/>
-    <path d="M17 30c0-9 7-15 15-15s15 6 15 15z" fill="${hair}"/>
-    ${A ? `<path d="M15 28.5c0-10 7.6-16.5 17-16.5s17 6.5 17 16.5z" fill="${cap}"/>
-           <path d="M15 24.5h34v4H15z" fill="#f6ecd9" opacity=".22"/>
-           <path d="M8 28.5h27a2.6 2.6 0 0 1 0 5.2H10a2 2 0 0 1-2-2z" fill="${cap}"/>
-           <circle cx="32" cy="11.5" r="2.2" fill="${cap}"/>` : ''}
-    ${A ? '' : `<circle cx="51" cy="30" r="5" fill="${hair}"/><circle cx="51" cy="30" r="2.4" fill="${band}"/>`}
-    <circle cx="26" cy="35" r="2.3" fill="#20201c"/><circle cx="38" cy="35" r="2.3" fill="#20201c"/>
-    <circle cx="26.8" cy="34.2" r=".8" fill="#fff"/><circle cx="38.8" cy="34.2" r=".8" fill="#fff"/>
-    <path d="M27 44c2 2.4 8 2.4 10 0" stroke="#b2685a" stroke-width="2" fill="none" stroke-linecap="round"/>
-    <path d="M22 30.5c1.6-1.2 4-1.2 5.6 0M36.4 30.5c1.6-1.2 4-1.2 5.6 0" stroke="${hair}" stroke-width="1.8" fill="none" stroke-linecap="round"/>
-    <circle cx="20" cy="39" r="2.4" fill="#e07a63" opacity=".3"/><circle cx="44" cy="39" r="2.4" fill="#e07a63" opacity=".3"/>
+    <path d="M7.4 56h49.2q.7 2 1.4 4H6q.7-2 1.4-4z" fill="${trim}" opacity=".9"/>
+    ${A ? '' : `<ellipse cx="32" cy="35" rx="19.5" ry="21" fill="${hair}"/>
+                <circle cx="50.5" cy="28" r="5.4" fill="${hair}"/>
+                <circle cx="50.5" cy="28" r="2.4" fill="${band}"/>`}
+    <ellipse cx="32" cy="33" rx="15" ry="16.4" fill="${skin}"/>
+    ${A ? curls : `<path d="M17.2 29c0-9.4 6.8-15.4 14.8-15.4s14.8 6 14.8 15.4q-7-4.6-16.6-3.4Q22 26.6 17.2 29z" fill="${hair}"/>`}
+    <ellipse cx="25.6" cy="33.4" rx="4.1" ry="4.6" fill="#f8f4ec"/>
+    <ellipse cx="38.4" cy="33.4" rx="4.1" ry="4.6" fill="#f8f4ec"/>
+    <circle cx="25.6" cy="33.6" r="2.7" fill="${A ? '#4a3220' : '#3c4a38'}"/>
+    <circle cx="38.4" cy="33.6" r="2.7" fill="${A ? '#4a3220' : '#3c4a38'}"/>
+    <circle cx="25.6" cy="33.6" r="1.3" fill="#1b1713"/><circle cx="38.4" cy="33.6" r="1.3" fill="#1b1713"/>
+    <circle cx="24.5" cy="31.9" r="1.0" fill="#fff"/><circle cx="37.3" cy="31.9" r="1.0" fill="#fff"/>
+    <path d="M21.6 27c1.8-1.5 5-1.5 6.8-.2M35.6 26.8c1.8-1.3 5-1.3 6.8.2" stroke="${hair}" stroke-width="1.9" fill="none" stroke-linecap="round"/>
+    <path d="M30 39.4q2 1.2 4 0" stroke="#9c5543" stroke-width="1.7" fill="none" stroke-linecap="round"/>
+    <ellipse cx="19.8" cy="37.4" rx="2.8" ry="1.8" fill="#e07a63" opacity=".32"/>
+    <ellipse cx="44.2" cy="37.4" rx="2.8" ry="1.8" fill="#e07a63" opacity=".32"/>
   </svg>`;
 }
 
@@ -8159,7 +8019,7 @@ window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS,
    önbelleğe hiç uğramadan soruyor; kendi numarasıyla uyuşmuyorsa bütün
    önbellekleri ve servis çalışanlarını silip bir kez yeniden yükleniyor.
    Döngüye girmesin diye tek seferlik bir işaret bırakıyor.               */
-const BUILD = '19.10.2026 18:54';
+const BUILD = '19.10.2026 22:38';
 /* Başlık ekranındaki damga elle yazılıyordu ve geride kalabiliyordu;
    artık yapı numarasının kendisinden yazılıyor.                          */
 { const el = document.getElementById('build'); if(el) el.textContent = 'sürüm ' + BUILD; }
