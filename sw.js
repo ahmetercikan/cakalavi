@@ -1,6 +1,6 @@
 /* Çakal Avı — çevrimdışı önbellek.
    Oyun dosyaları kurulumda, three.js gibi dış kaynaklar ilk kullanımda saklanır. */
-const V = 'cakalavi-v3';
+const V = 'cakalavi-v4';
 const CORE = ['./', './index.html', './world.json', './manifest.webmanifest',
               './icon-192.png', './icon-512.png'];
 

@@ -924,6 +924,44 @@ try {
   bootMsg.textContent = 'Harita verisi yüklenemedi. Sayfayı yenileyin.';
   throw e;
 }
+
+/* ---------- hazır modeller: kaya, çakıl, çalı ----------
+   Quaternius Stylized Nature MegaKit'ten (CC0) alınmış, dokuları çıkarılmış
+   modeller; oyun kendi düz toon renklerini uyguluyor, dosyalar bu yüzden
+   küçük (toplam ~180 KB). Yüklenemezlerse oyun eski prosedürel geometriyle
+   çalışmaya devam ediyor — model dosyaları zorunlu değil.                 */
+const PROP = { rock:[], pebble:[], bush:null };
+/* modeli tabanı sıfırda, yatayda ortalı ve bir metre boyunda hale getirir */
+function normProp(geo){
+  const g = geo.clone();
+  g.computeBoundingBox();
+  const b = g.boundingBox, c = new THREE.Vector3();
+  b.getCenter(c);
+  const h = Math.max(0.001, b.max.y - b.min.y);
+  g.translate(-c.x, -b.min.y, -c.z);
+  g.scale(1/h, 1/h, 1/h);
+  g.computeBoundingSphere();
+  g.deleteAttribute('uv');          /* doku yok, veri de durmasın */
+  return g;
+}
+try {
+  step(0.1, 'Modeller yükleniyor');
+  const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+  const loader = new GLTFLoader();
+  const want = [['rock','Rock_Medium_1'], ['rock','Rock_Medium_2'], ['rock','Rock_Medium_3'],
+                ['pebble','Pebble_Round_1'], ['pebble','Pebble_Round_2'], ['pebble','Pebble_Round_3'],
+                ['bush','Bush_Common']];
+  const got = await Promise.all(want.map(([k, n]) =>
+    loader.loadAsync('assets/' + n + '.glb').then(r => [k, r]).catch(() => [k, null])));
+  for(const [k, r] of got){
+    if(!r) continue;
+    let geo = null;
+    r.scene.traverse(o => { if(o.isMesh && !geo) geo = o.geometry; });
+    if(!geo) continue;
+    const g = normProp(geo);
+    if(k === 'bush') PROP.bush = g; else PROP[k].push(g);
+  }
+} catch(e){ /* modelsiz devam */ }
 step(.12, 'Arazi yükseltiliyor…');
 
 const S = W.meta.scalePerPixel;
@@ -1906,7 +1944,8 @@ for(let ci = 0; ci < W.coast.length; ci++){
     }
   }
 }
-const rockMat = toon({ color:0x9a9280, roughness:1, flatShading:true });
+const rockMat = PROP.rock.length ? toon({ color:0xa49b86, rim:0.18 })
+                                : toon({ color:0x9a9280, flatShading:true });
 const rockGeo = new THREE.IcosahedronGeometry(1, 0);
 const rockChunks = new Map();
 for(const p of rockList){
@@ -1915,13 +1954,25 @@ for(const p of rockList){
   if(!arr){ arr = []; rockChunks.set(key, arr); }
   arr.push(p);
 }
-for(const [, list] of rockChunks){
-  const im = new THREE.InstancedMesh(rockGeo, rockMat, list.length);
+/* Model kayalar örnek başına ~350 üçgen, eski taş 20; hepsini modele çevirmek
+   yarım milyon üçgen ekliyor. Bu yüzden model bir bütçeyle dağıtılıyor: öbekler
+   karıştırılmış sırada geziliyor, bütçe bitince kalanlar ucuz taşa düşüyor.   */
+const rockOrder = [...rockChunks.values()];
+for(let i = rockOrder.length - 1; i > 0; i--){
+  const j = Math.floor(rand()*(i + 1));
+  [rockOrder[i], rockOrder[j]] = [rockOrder[j], rockOrder[i]];
+}
+let rockBudget = Math.round(240*Q.scatter);
+for(const list of rockOrder){
+  const useModel = PROP.rock.length > 0 && list.length <= rockBudget;
+  if(useModel) rockBudget -= list.length;
+  const geo = useModel ? PROP.rock[Math.floor(rand()*PROP.rock.length)] : rockGeo;
+  const im = new THREE.InstancedMesh(geo, rockMat, list.length);
   list.forEach((p, i) => {
-    dummy.position.set(p[0], p[1] + 0.1, p[2]);
-    dummy.rotation.set(rand()*3, rand()*6, rand()*3);
-    const sc = 0.3 + rand()*0.78;
-    dummy.scale.set(sc, sc*(0.42+rand()*0.5), sc);
+    dummy.position.set(p[0], p[1] + (useModel ? -0.05 : 0.1), p[2]);
+    dummy.rotation.set(useModel ? 0 : rand()*3, rand()*6, useModel ? 0 : rand()*3);
+    const sc = useModel ? (0.55 + rand()*1.5) : (0.3 + rand()*0.78);
+    dummy.scale.set(sc, sc*(useModel ? (0.7 + rand()*0.6) : (0.42 + rand()*0.5)), sc);
     dummy.updateMatrix();
     im.setMatrixAt(i, dummy.matrix);
   });
@@ -3976,16 +4027,28 @@ const tuftGeo = (() => {
   }
   return mergeSimple(parts, cols);
 })();
-const pebGeo = (() => {
+const pebGeo = PROP.pebble.length ? PROP.pebble[0] : (() => {
   const a = new THREE.IcosahedronGeometry(0.075, 0);
   a.scale(1, 0.55, 1.2); a.translate(0, 0.03, 0);
   return mergeSimple([a], [new THREE.Color(1, 1, 1)]);
 })();
+const PEB_K = PROP.pebble.length ? 0.17 : 1;   /* model birim boyda, eskisi 7 cm'di */
 const TUFT_N = Math.round(420*Q.scatter), PEB_N = Math.round(220*Q.scatter);
 const tufts = new THREE.InstancedMesh(tuftGeo,
   toon({ vertexColors:true, roughness:0.95, side:THREE.DoubleSide }), TUFT_N);
+/* model çakıllarda vertex rengi yok; renk örnek bazında veriliyor */
 const pebs = new THREE.InstancedMesh(pebGeo,
-  toon({ vertexColors:true, roughness:1, flatShading:true }), PEB_N);
+  toon({ vertexColors:!PROP.pebble.length, flatShading:!PROP.pebble.length }), PEB_N);
+/* maki çalısı: tutam yerine seyrek serpilen hacimli bir model */
+const BUSH_N = PROP.bush ? Math.round(44*Q.scatter) : 0;
+const bushes = BUSH_N ? new THREE.InstancedMesh(PROP.bush,
+  toon({ vertexColors:true, rim:0.3 }), BUSH_N) : null;
+if(bushes){
+  bushes.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  bushes.castShadow = true; bushes.receiveShadow = true;
+  bushes.frustumCulled = false;
+  scene.add(bushes);
+}
 tufts.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 pebs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 tufts.castShadow = false; tufts.receiveShadow = true;
@@ -3994,6 +4057,7 @@ pebs.castShadow = true; pebs.receiveShadow = true;
 scene.add(tufts, pebs);
 const TUFT_COL = [new THREE.Color(0xa89758), new THREE.Color(0xb6ab8c), new THREE.Color(0x76954a),
                   new THREE.Color(0x5d7a3e), new THREE.Color(0xb6ab8c), new THREE.Color(0x8f9a6a)];
+const BUSH_COL = [new THREE.Color(0x6f8a4c), new THREE.Color(0x58743e)];
 const PEB_COL = [new THREE.Color(0xb3a789), new THREE.Color(0xa8a393), new THREE.Color(0x9c9a86),
                  new THREE.Color(0x8e8c7c), new THREE.Color(0xa8a393), new THREE.Color(0xc2b596)];
 const dcat = new THREE.Object3D();
@@ -4001,8 +4065,8 @@ let scatterAt = null;
 function scatter(cx, cz){
   scatterAt = [cx, cz];
   const R = 26;
-  let ti = 0, pi = 0;
-  for(let k = 0; k < 1600 && (ti < TUFT_N || pi < PEB_N); k++){
+  let ti = 0, pi = 0, bi = 0;
+  for(let k = 0; k < 1600 && (ti < TUFT_N || pi < PEB_N || bi < BUSH_N); k++){
     const a = rand()*6.283, r = Math.sqrt(rand())*R;
     const x = cx + Math.cos(a)*r, z = cz + Math.sin(a)*r;
     const h = terrainH(x, z);
@@ -4017,11 +4081,19 @@ function scatter(cx, cz){
     if(wantPeb && pi < PEB_N){
       dcat.position.set(x, h, z);
       dcat.rotation.set(rand()*3, rand()*6.3, rand()*3);
-      const sc = 0.5 + rand()*1.1;
+      const sc = (0.5 + rand()*1.1)*PEB_K;
       dcat.scale.set(sc, sc*(0.6 + rand()*0.6), sc);
       dcat.updateMatrix(); pebs.setMatrixAt(pi, dcat.matrix);
       pebs.setColorAt(pi, PEB_COL[cov].clone().multiplyScalar(0.85 + rand()*0.3));
       pi++;
+    } else if(!onRoad && !sandy && bushes && bi < BUSH_N && (cov === 2 || cov === 3) && rand() < 0.3){
+      dcat.position.set(x, h - 0.04, z);
+      dcat.rotation.set(0, rand()*6.3, 0);
+      const sc = 0.7 + rand()*0.75;
+      dcat.scale.set(sc, sc*(0.8 + rand()*0.5), sc);
+      dcat.updateMatrix(); bushes.setMatrixAt(bi, dcat.matrix);
+      bushes.setColorAt(bi, BUSH_COL[rand() < 0.5 ? 0 : 1].clone().multiplyScalar(0.84 + rand()*0.3));
+      bi++;
     } else if(!onRoad && !sandy && ti < TUFT_N){
       dcat.position.set(x, h - 0.02, z);
       dcat.rotation.set(0, rand()*6.3, 0);
@@ -4035,6 +4107,11 @@ function scatter(cx, cz){
   dcat.scale.setScalar(0); dcat.updateMatrix();
   for(let k = ti; k < TUFT_N; k++) tufts.setMatrixAt(k, dcat.matrix);
   for(let k = pi; k < PEB_N; k++) pebs.setMatrixAt(k, dcat.matrix);
+  if(bushes){
+    for(let k = bi; k < BUSH_N; k++) bushes.setMatrixAt(k, dcat.matrix);
+    bushes.instanceMatrix.needsUpdate = true;
+    if(bushes.instanceColor) bushes.instanceColor.needsUpdate = true;
+  }
   tufts.instanceMatrix.needsUpdate = true; pebs.instanceMatrix.needsUpdate = true;
   if(tufts.instanceColor) tufts.instanceColor.needsUpdate = true;
   if(pebs.instanceColor) pebs.instanceColor.needsUpdate = true;

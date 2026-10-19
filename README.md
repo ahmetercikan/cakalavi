@@ -35,7 +35,8 @@ Oyun yalnızca dokunmatik oynanır; arayüzde klavye tuşu geçmez.
 
 ## Teknik
 
-Tek dosya (`index.html`) + harita verisi (`world.json`). Three.js r160 CDN'den yüklenir,
+Tek dosya (`index.html`) + harita verisi (`world.json`) + `assets/` altında birkaç
+hazır model. Three.js r186 CDN'den yüklenir,
 parıltı katmanı `three/addons` ile eklenir. Yapı adımı yoktur; depo olduğu gibi
 GitHub Pages'e yayınlanır (`.github/workflows/pages.yml`).
 
@@ -44,3 +45,11 @@ GitHub Pages'e yayınlanır (`.github/workflows/pages.yml`).
 kademesinden birinde kurulur: gölge çözünürlüğü, su ağı, ganimet yoğunluğu, serpinti,
 görüş mesafesi ve parıltı katmanı buna bağlı. Kare hızı düşerse kademe oyun sırasında
 kendiliğinden iner. Test için `?tier=0..3` ve `?desktop=1` parametreleri vardır.
+
+## Varlıklar
+
+`assets/` altındaki kaya, çakıl ve çalı modelleri Quaternius'un **Stylized Nature
+MegaKit** paketinden (CC0, https://quaternius.com) alınmıştır. Dokuları
+çıkarılmış, yerine oyunun kendi düz toon renkleri uygulanmıştır; toplam ~180 KB.
+Model dosyaları zorunlu değildir — yüklenemezlerse oyun prosedürel geometriyle
+çalışmaya devam eder.
