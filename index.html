@@ -637,7 +637,9 @@ body.touch #tbtns{display:grid}
   background:linear-gradient(170deg, rgba(14,48,66,.95), rgba(4,18,27,.97));
   border:1px solid var(--hair); box-shadow:0 50px 100px -40px #000; text-align:center;
 }
-#title .box::before{content:""; position:absolute; inset:0; background-image:var(--grain); background-size:120px; opacity:.05; mix-blend-mode:overlay}
+/* Süslemelik doku katmanı kartın tamamını örtüyordu ve konumlandırılmış
+   olduğu için düğmelerin üstünde kalıp tıklamayı yutuyordu. */
+#title .box::before{content:""; position:absolute; inset:0; pointer-events:none; background-image:var(--grain); background-size:120px; opacity:.05; mix-blend-mode:overlay}
 #title .eyebrow{font-family:var(--mono); font-size:10px; letter-spacing:.3em; text-transform:uppercase; color:var(--teal); margin:0}
 #title h2{font-family:var(--display); font-size:clamp(28px,5.4vw,42px); font-weight:700; margin:8px 0 6px; line-height:1}
 #title .lede{font-size:13px; color:var(--bone-2); margin:0 auto 20px; max-width:50ch; line-height:1.55}
@@ -735,6 +737,8 @@ body.touch #tbtns{display:grid}
 <symbol id="i-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.4 9.2a2.7 2.7 0 1 1 3.8 2.5c-.9.4-1.2 1-1.2 1.9M12 17.2h.02"/></symbol>
 <symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 6.4 17.6 17.6M17.6 6.4 6.4 17.6"/></symbol>
 <symbol id="i-breath" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="14.6" r="4.4"/><circle cx="16.6" cy="8.4" r="2.8"/><circle cx="17.6" cy="16.4" r="1.6"/></symbol>
+<symbol id="i-sound" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 9.4h3.2l4.4-3.6v12.4l-4.4-3.6H4.6z"/><path d="M16 9.2a4 4 0 0 1 0 5.6"/><path d="M18.6 6.6a7.6 7.6 0 0 1 0 10.8"/></symbol>
+<symbol id="i-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 9.4h3.2l4.4-3.6v12.4l-4.4-3.6H4.6z"/><path d="m16.4 9.6 4.4 4.8M20.8 9.6l-4.4 4.8"/></symbol>
 <symbol id="i-bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13.4 2.4 5.6 13.6h5.2l-1 8 7.8-11.4h-5z"/></symbol>
 <symbol id="i-jump" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4v10M8.2 7.2 12 3.4l3.8 3.8M4.4 19.6h15.2"/></symbol>
 <symbol id="i-hand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8.6 12.6V6a1.7 1.7 0 0 1 3.4 0v5"/><path d="M12 11V4.8a1.7 1.7 0 0 1 3.4 0V12"/><path d="M15.4 12V7.6a1.7 1.7 0 0 1 3.4 0v7.8a6 6 0 0 1-6 6h-1.2a6 6 0 0 1-6-6v-2.6a1.7 1.7 0 0 1 3.4 0"/></symbol>
@@ -800,6 +804,7 @@ body.touch #tbtns{display:grid}
       <button class="rbtn sm" id="t-pois" aria-pressed="true" title="Mekan adları"><svg class="ico"><use href="#i-pin"/></svg></button>
       <button class="rbtn sm" id="b-quests" title="Görevler"><svg class="ico"><use href="#i-quest"/></svg></button>
       <button class="rbtn sm" id="b-fs" title="Tam ekran"><svg class="ico"><use href="#i-map"/></svg></button>
+      <button class="rbtn sm" id="b-snd" aria-pressed="true" title="Ses (S)"><svg class="ico"><use href="#i-sound"/></svg></button>
       <button class="rbtn sm" id="b-fx" aria-pressed="true" title="Parıltı efekti (P)"><svg class="ico"><use href="#i-star"/></svg></button>
       <button class="rbtn sm" id="b-help" title="Kontroller (H)"><svg class="ico"><use href="#i-help"/></svg></button>
     </div>
@@ -1010,6 +1015,12 @@ function terrainH(x, z){
 
 const rand = (s => () => (s = (s*1664525 + 1013904223) >>> 0) / 4294967296)(20261018);
 const pick = arr => arr[Math.floor(rand()*arr.length)];
+/* Ses durumu erken tanımlı: dünya kurulurken çıkan bir uyarı sesi
+   bildirimi tetikleyebiliyor, o anda SND henüz tanımlı olmamalı.      */
+const SND = {
+  ctx:null, master:null, sfx:null, mus:null, noise:null,
+  on:(localStorage.getItem('dk-snd') !== '0'), ready:false, musicOn:false,
+};
 
 /* ---------------- sahne ---------------- */
 /* ---- cihaz ve kalite kademesi ----
@@ -4758,12 +4769,14 @@ function mountBroom(b){
   if(!FLY.mateBroom){ FLY.mateBroom = makeBroom(); scene.add(FLY.mateBroom); }
   FLY.mateBroom.visible = true;
   addStat('ucus', 1);
+  sfx('mount'); musicOn(true);
   feed('Süpürgeye bindin — Zıpla yüksel, Dal alçal', { icon:'jump', hold:4200 });
   say(GS.who, 'Tutun Alya, kalkıyoruz!', 3);
   checkQuests();
 }
 function dismountBroom(){
   if(!FLY.on) return;
+  musicOn(false);
   if(typeof resetTour === 'function') resetTour();
   const b = FLY.broom;
   FLY.on = false; FLY.broom = null;
@@ -4873,6 +4886,7 @@ function feed(text, opt){
   while(UI.feed.children.length > 6) UI.feed.firstChild.remove();
 }
 function toast(msg, cls){
+  sfx(cls === 'bad' ? 'bad' : cls === 'good' ? 'good' : 'ui');
   feed(msg, { kind:cls, icon:cls === 'bad' ? 'help' : cls === 'good' ? 'star' : 'wave',
               hold:cls === 'bad' ? 3000 : 2400 });
 }
@@ -5088,6 +5102,8 @@ function helpHTML(){
   return `<p class="note">Üçüncü şahıs oynanır: Ali ya da Alya’yı yürütürsün, diğeri peşinden gelir.</p>
     <div class="sect"><h4>Kontroller</h4><div class="ln"></div></div>
     ${key('Sol alttaki yön çubuğu', 'başparmağını üstüne koy, istediğin yöne it — kenara dayanırsan koşarsın')}
+    ${key('Süpürge', 'yanına git, Etkileş’e bas — Zıpla yüksel, Dal alçal, Etkileş in')}
+    ${key('Ses', 'sağ üstteki hoparlör (S)')}
     ${key('Ekrana bir kez dokun', 'zıpla')}
     ${key('Ekranı sürükle', 'etrafına bak · iki parmak yakınlaştırır')}
     ${key('Etkileş — büyük tuş', 'büfe, hurdacı, pano, arkadaşla konuş, kıyıdan çakıl topla')}
@@ -5109,7 +5125,7 @@ UI.modal.addEventListener('click', e => {
     let got = 0, n = 0;
     for(const k of ks){ const c = GS.bag[k] || 0; if(!c) continue; got += rate(k, modalKind)*c; n += c; GS.bag[k] = 0; }
     if(got){
-      GS.money += got; addStat('sold', got);
+      GS.money += got; addStat('sold', got); sfx('coin');
       feed(`${n} ganimet satıldı`, { kind:'good', icon:'coin', value:'+₺' + got });
       refreshHUD(); checkQuests();
       UI.modalBody.innerHTML = shopHTML(modalKind);
@@ -5139,6 +5155,7 @@ $('b-fx').addEventListener('click', () => setFx(!fxOn));
 
 /* ---------- toplama ---------- */
 function takeLoot(o){
+  sfx('loot');
   if(bagCount() >= GS.cap){
     if(!takeLoot.warned || performance.now() - takeLoot.warned > 4000){
       takeLoot.warned = performance.now();
@@ -5204,6 +5221,7 @@ function throwStone(){
     v.y = (aim.h.y + 0.5 - from.y)/T + 0.5*19*T;
     const sp = v.length();
     spawnShot('stone', from, v.multiplyScalar(1/sp), sp);
+    sfx('throw');
     KIDS[GS.who].userData.throwT = 0.42;
     refreshHUD();
     return;
@@ -5211,6 +5229,7 @@ function throwStone(){
   const dir = new THREE.Vector3(-Math.sin(camYaw), 0, -Math.cos(camYaw));
   dir.y = 0.34 - camPitch*0.5; dir.normalize();
   spawnShot('stone', from, dir, 22*PERK[GS.who].stone);
+  sfx('throw');
   KIDS[GS.who].userData.throwT = 0.42;
   refreshHUD();
 }
@@ -5511,13 +5530,14 @@ addEventListener('keydown', e => {
   keys.add(e.code);
   if(e.code === 'KeyH'){ e.preventDefault(); openModal('help'); }
   if(e.code === 'KeyP') setFx(!fxOn);
+  if(e.code === 'KeyS' && !e.repeat){ sndInit(); sndToggle(); }
   if(e.code === 'KeyI'){ e.preventDefault(); UI.modal.hidden ? openModal('bag') : closeModal(); }
   if(e.code === 'KeyF') toggleTorch();
   if(e.code === 'KeyT') switchKid();
   if(e.code === 'KeyR') throwStone();
   if(e.code === 'KeyE') interact();
   if(e.code === 'KeyM') setMode(mode === 'play' ? 'orbit' : 'play');
-  if(e.code === 'Space'){ e.preventDefault(); if(mode === 'play' && !P.swim && P.onGround) P.vy = 5.4; }
+  if(e.code === 'Space'){ e.preventDefault(); if(mode === 'play' && !P.swim && P.onGround){ P.vy = 5.4; sfx('jump'); } }
 });
 addEventListener('keyup', e => keys.delete(e.code));
 
@@ -5576,6 +5596,7 @@ function interact(){
       /* hayvan: sevdikten sonra bir süre peşinden gelir */
       L.pet = 5; L.follow = 22;
       sayAt(L, pick(SAY_PET[L.cat ? 'kedi' : 'kopek']));
+      sfx(L.cat ? 'meow' : 'bark');
       addStat('sevdi', 1);
       toast((L.cat ? 'Kediyi' : 'Köpeği') + ' sevdin — peşinden geliyor', 'good');
       buzz(16); checkQuests();
@@ -5790,7 +5811,7 @@ const buzz = ms => { try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e)
   /* ekrana dokununca da, Zıpla tuşuna basınca da aynı hareket */
   function jump(){
     if(FLY.on || P.swim){ IN.jump = true; setTimeout(() => { IN.jump = false; }, 200); }
-    else if(P.onGround) P.vy = 5.4;
+    else if(P.onGround){ P.vy = 5.4; sfx('jump'); }
   }
 
   /* --- eylem tuşları --- */
@@ -5827,7 +5848,10 @@ let wakeLock = null;
 async function keepAwake(){
   try{ if('wakeLock' in navigator && !wakeLock) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
 }
-document.addEventListener('visibilitychange', () => { if(!document.hidden) keepAwake(); });
+document.addEventListener('visibilitychange', () => {
+  if(!document.hidden) keepAwake();
+  if(SND.ctx){ if(document.hidden) SND.ctx.suspend(); else SND.ctx.resume(); }
+});
 $('b-fs').addEventListener('click', async () => {
   try{
     if(document.fullscreenElement) await document.exitFullscreen();
@@ -5837,6 +5861,7 @@ $('b-fs').addEventListener('click', async () => {
   }
 });
 $('b-quests').addEventListener('click', () => openModal('board'));
+$('b-snd').addEventListener('click', () => { sndInit(); sndToggle(); sfx('ui'); });
 
 /* ---------- radar: oyuncu merkezli, dönen pusulalı mini harita ---------- */
 const mini = $('mini');
@@ -6073,6 +6098,7 @@ const shoreCell = (x, z) => {
 };
 function hitPlayer(kind){
   if(GS.stun > 0) return;
+  sfx('hit');
   GS.stun = kind === 'slipper' ? 1.25 : 0.95;
   addStat('hit', 1);
   const lost = loseLoot(kind === 'slipper' ? 2 : 1);
@@ -6176,8 +6202,10 @@ function updatePlayer(dt, t){
   else {
   const ground = groundAt(P.x, P.z);
   const wet = ground < -0.85;                     // 85 cm'den derinse yüzülür, daha sığı yürünür
+  const wasSwim = P.swim;
   if(!wet) P.swim = false;
   else if(P.y < 0.3) P.swim = true;
+  if(P.swim !== wasSwim) sfx('splash');
 
   const diveKey = keys.has('KeyC') || keys.has('ControlLeft') || IN.dive;
   const upKey = keys.has('Space') || IN.jump;
@@ -6203,6 +6231,16 @@ function updatePlayer(dt, t){
     P.face += diff*Math.min(1, dt*12);
   }
   P.spd = amt*(0.62 + 0.38*P.runF);
+  /* adım sesi: hıza bağlı aralık, kumda daha yumuşak */
+  if(!FLY.on && P.onGround && !P.swim && P.spd > 0.05){
+    P.stepT = (P.stepT || 0) + dt*(2.4 + P.spd*4.4);
+    if(P.stepT >= 1){
+      P.stepT = 0;
+      const ci = Math.min(GW-1, Math.max(0, Math.round((P.x - MINX)/GSTEP)));
+      const cj = Math.min(GH-1, Math.max(0, Math.round((P.z - MINZ)/GSTEP)));
+      sfx(sandCell[cj*GW + ci] === 1 ? 'stepSand' : 'step', 0.75 + Math.random()*0.4);
+    }
+  } else P.stepT = 0.75;
 
   if(P.swim){
     const bed = terrainH(P.x, P.z);
@@ -6212,7 +6250,9 @@ function updatePlayer(dt, t){
     else ty = THREE.MathUtils.lerp(P.y, -0.42, dt*1.6);
     P.y = Math.max(bed + 0.45, Math.min(-0.3, ty));
     P.vy = 0; P.onGround = false;
+    const wasDive = P.dive;
     P.dive = P.y < -0.8;
+    if(P.dive && !wasDive) sfx('dive');
     const headY = P.y + 1.12;
     GS.under = headY < -0.06;
     const BR = (GS.gear.gozluk ? 40 : 22)*PK.breath;
@@ -6231,7 +6271,10 @@ function updatePlayer(dt, t){
     GS.breath = Math.min(1, GS.breath + dt/4);
     P.vy -= 19*dt;
     P.y += P.vy*dt;
-    if(P.y <= ground){ P.y = ground; P.vy = 0; P.onGround = true; } else P.onGround = false;
+    if(P.y <= ground){
+      if(!P.onGround && P.vy < -4) sfx('land', Math.min(1, -P.vy/9));
+      P.y = ground; P.vy = 0; P.onGround = true;
+    } else P.onGround = false;
   }
   }
 
@@ -6315,7 +6358,7 @@ function updateJackals(dt, t){
       }
       const tdx = j.tx - j.x, tdz = j.tz - j.z, td = Math.hypot(tdx, tdz);
       if(td > 1.5){ sp = 1.7; slide(j, tdx/td*sp*dt, tdz/td*sp*dt); j.face = Math.atan2(-tdx/td, -tdz/td); }
-      if(GS.night && d < 46) j.state = 'stalk';
+      if(GS.night && d < 46){ j.state = 'stalk'; if(Math.random() < 0.25) sfx('howl'); }
     } else if(j.state === 'stalk'){
       if(d > 70){ j.state = 'wander'; j.t = 0; }
       else if(d > keep + 1.2){ sp = 3.4; slide(j, dx/d*sp*dt, dz/d*sp*dt); }
@@ -6721,6 +6764,7 @@ function checkBasket(shot, prevY){
       addStat('pota', 1);
       GS.money += 12;
       feed('Sayı! Potadan geçti · ₺12', { icon:'coin', hold:3200 });
+      sfx('basket');
       buzz(24); refreshHUD(); checkQuests();
       return true;
     }
@@ -6777,6 +6821,7 @@ function updateTour(dt){
   const d = Math.hypot(P.x - r.x, P.z - r.z, P.y - r.y);
   if(d < 3.4){
     r.done = true;
+    sfx('ring');
     if(!TOUR.running){ TOUR.running = true; TOUR.t = 0; }
     TOUR.i++;
     buzz(14);
@@ -6793,6 +6838,243 @@ function updateTour(dt){
     } else {
       feed('Halka ' + TOUR.i + '/' + RINGS.length, { icon:'jump', hold:1500 });
     }
+  }
+}
+
+
+/* ---------- ses ----------------------------------------------------------
+   Oyunun hiç sesi yoktu. Dosya indirmek yerine her şey Web Audio ile
+   yerinde üretiliyor: tek bir gürültü tamponu, birkaç osilatör ve zarf.
+   Böylece ne indirme var, ne telif, ne de çevrimdışı sorunu.
+
+   Tarayıcılar sesi ilk dokunuştan önce açtırmıyor, bu yüzden bağlam
+   "Başla"ya basılınca kuruluyor.                                        */
+function sndInit(){
+  if(SND.ctx || !window.AudioContext && !window.webkitAudioContext) return;
+  try{
+    const C = window.AudioContext || window.webkitAudioContext;
+    const ctx = new C();
+    SND.ctx = ctx;
+    SND.master = ctx.createGain(); SND.master.gain.value = SND.on ? 0.9 : 0;
+    SND.master.connect(ctx.destination);
+    SND.sfx = ctx.createGain(); SND.sfx.gain.value = 0.9; SND.sfx.connect(SND.master);
+    SND.mus = ctx.createGain(); SND.mus.gain.value = 0;   /* yalnız uçarken açılır */
+    SND.mus.connect(SND.master);
+    /* bir kere üretilen pembe-ish gürültü; adım, dalga, rüzgâr hep bundan */
+    const n = ctx.sampleRate*2;
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    let b0 = 0, b1 = 0, b2 = 0;
+    for(let i = 0; i < n; i++){
+      const w = Math.random()*2 - 1;
+      b0 = 0.99765*b0 + w*0.0990460;
+      b1 = 0.96300*b1 + w*0.2965164;
+      b2 = 0.57000*b2 + w*1.0526913;
+      d[i] = (b0 + b1 + b2 + w*0.1848)*0.22;
+    }
+    SND.noise = buf;
+    SND.ready = true;
+    ambStart();
+    if(ctx.state !== 'running') ctx.resume();
+  }catch(e){ SND.ready = false; }
+}
+/* Tarayıcı sesi ilk gerçek dokunuştan önce askıda tutuyor; her dokunuşta
+   bir kez uyandırmayı deniyoruz.                                       */
+const sndWake = () => { if(SND.ctx && SND.ctx.state !== 'running') SND.ctx.resume(); };
+addEventListener('pointerdown', sndWake, { passive:true });
+addEventListener('touchstart', sndWake, { passive:true });
+addEventListener('keydown', sndWake);
+function sndToggle(v){
+  SND.on = v === undefined ? !SND.on : !!v;
+  localStorage.setItem('dk-snd', SND.on ? '1' : '0');
+  if(SND.master) SND.master.gain.setTargetAtTime(SND.on ? 0.9 : 0, SND.ctx.currentTime, 0.04);
+  const b = document.getElementById('b-snd');
+  if(b){
+    b.setAttribute('aria-pressed', SND.on ? 'true' : 'false');
+    b.querySelector('use').setAttribute('href', SND.on ? '#i-sound' : '#i-mute');
+  }
+}
+/* --- küçük yapı taşları --- */
+function env(g, t0, a, d2, peak, sus, rel){
+  g.gain.cancelScheduledValues(t0);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0001, peak), t0 + a);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0001, sus), t0 + a + d2);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + a + d2 + rel);
+}
+function tone(freq, t0, dur, vol, type, bus, slideTo){
+  if(!SND.ready) return;
+  const ctx = SND.ctx, o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type || 'sine';
+  o.frequency.setValueAtTime(freq, t0);
+  if(slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), t0 + dur);
+  env(g, t0, 0.006, dur*0.4, vol, vol*0.35, dur*0.6);
+  o.connect(g); g.connect(bus || SND.sfx);
+  o.start(t0); o.stop(t0 + dur + 0.08);
+}
+function noiseBurst(t0, dur, vol, lo, hi, q, bus){
+  if(!SND.ready) return;
+  const ctx = SND.ctx, src = ctx.createBufferSource();
+  src.buffer = SND.noise; src.loop = true;
+  src.playbackRate.value = 0.8 + Math.random()*0.5;
+  const f = ctx.createBiquadFilter();
+  f.type = hi ? 'bandpass' : 'lowpass';
+  f.frequency.setValueAtTime(lo, t0);
+  if(hi) f.frequency.exponentialRampToValueAtTime(Math.max(60, hi), t0 + dur);
+  f.Q.value = q || 1;
+  const g = ctx.createGain();
+  env(g, t0, 0.004, dur*0.3, vol, vol*0.2, dur*0.7);
+  src.connect(f); f.connect(g); g.connect(bus || SND.sfx);
+  src.start(t0); src.stop(t0 + dur + 0.1);
+}
+/* --- oyun sesleri --- */
+const _sndCd = {};
+function sfx(kind, vol){
+  if(!SND.ready || !SND.on) return;
+  const ctx = SND.ctx, t = ctx.currentTime, v = vol === undefined ? 1 : vol;
+  /* aynı ses üst üste binmesin */
+  if(_sndCd[kind] > t) return;
+  _sndCd[kind] = t + 0.03;
+  switch(kind){
+    case 'step':    noiseBurst(t, 0.09, 0.15*v, 900, 300, 1.2); break;
+    case 'stepSand':noiseBurst(t, 0.13, 0.12*v, 1600, 500, 0.8); break;
+    case 'jump':    tone(300, t, 0.16, 0.14*v, 'triangle', null, 620); break;
+    case 'land':    noiseBurst(t, 0.12, 0.13*v, 420, 160, 1.1); break;
+    case 'splash':  noiseBurst(t, 0.42, 0.22*v, 2600, 420, 0.7); break;
+    case 'dive':    noiseBurst(t, 0.6, 0.18*v, 900, 140, 0.9); break;
+    case 'loot':    tone(880, t, 0.1, 0.1*v, 'sine'); tone(1320, t + 0.07, 0.14, 0.08*v, 'sine'); break;
+    case 'coin':    tone(1046, t, 0.09, 0.1*v, 'square'); tone(1568, t + 0.08, 0.16, 0.07*v, 'square'); break;
+    case 'throw':   noiseBurst(t, 0.2, 0.1*v, 2200, 700, 2.4); break;
+    case 'hit':     noiseBurst(t, 0.1, 0.16*v, 300, 120, 1.0); break;
+    case 'basket':  [784, 988, 1319].forEach((f, i) => tone(f, t + i*0.07, 0.3, 0.09*v, 'triangle')); break;
+    case 'ring':    tone(1175, t, 0.22, 0.1*v, 'sine'); tone(1568, t + 0.06, 0.26, 0.08*v, 'sine'); break;
+    case 'mount':   noiseBurst(t, 0.5, 0.18*v, 400, 2400, 0.8); tone(220, t, 0.5, 0.08*v, 'sine', null, 560); break;
+    case 'meow':    tone(620, t, 0.26, 0.09*v, 'sawtooth', null, 840);
+                    tone(930, t + 0.1, 0.2, 0.04*v, 'sine', null, 700); break;
+    case 'bark':    noiseBurst(t, 0.07, 0.16*v, 1200, 600, 2.0);
+                    tone(180, t, 0.1, 0.12*v, 'square', null, 120); break;
+    case 'howl':    tone(330, t, 1.1, 0.07*v, 'sawtooth', null, 240); break;
+    case 'ui':      tone(660, t, 0.06, 0.06*v, 'triangle'); break;
+    case 'bad':     tone(220, t, 0.22, 0.12*v, 'square', null, 120); break;
+    case 'good':    [660, 880].forEach((f, i) => tone(f, t + i*0.08, 0.2, 0.08*v, 'triangle')); break;
+  }
+}
+
+/* --- ortam: deniz, rüzgâr, gece böcekleri --- */
+const AMB = { sea:null, seaG:null, wind:null, windG:null, night:null, nightG:null };
+function ambStart(){
+  if(!SND.ready || AMB.sea) return;
+  const ctx = SND.ctx;
+  const mk = (type, freq, q, gain) => {
+    const src = ctx.createBufferSource();
+    src.buffer = SND.noise; src.loop = true;
+    const f = ctx.createBiquadFilter();
+    f.type = type; f.frequency.value = freq; f.Q.value = q;
+    const g = ctx.createGain(); g.gain.value = gain;
+    src.connect(f); f.connect(g); g.connect(SND.sfx);
+    src.start();
+    return { src, f, g };
+  };
+  const sea = mk('lowpass', 520, 0.8, 0);   AMB.sea = sea.src;   AMB.seaG = sea.g;   AMB.seaF = sea.f;
+  const wd  = mk('bandpass', 340, 0.6, 0);  AMB.wind = wd.src;   AMB.windG = wd.g;
+  const ng  = mk('bandpass', 4200, 7, 0);   AMB.night = ng.src;  AMB.nightG = ng.g;
+}
+let _ambT = 0, _seaPhase = 0;
+function ambTick(dt){
+  if(!SND.ready || !AMB.seaG) return;
+  _ambT += dt;
+  _seaPhase += dt*0.42;
+  /* denize yaklaştıkça dalga sesi artar; dalga kendi içinde kabarıp iner */
+  const h = terrainH(P.x, P.z);
+  const near = Math.max(0, 1 - Math.max(0, h)/26);
+  const swell = 0.55 + Math.sin(_seaPhase)*0.3 + Math.sin(_seaPhase*0.37)*0.15;
+  const under = GS.under ? 0.35 : 1;
+  AMB.seaG.gain.setTargetAtTime(near*swell*0.12*under, SND.ctx.currentTime, 0.4);
+  AMB.seaF.frequency.setTargetAtTime(GS.under ? 220 : 520 + swell*220, SND.ctx.currentTime, 0.4);
+  AMB.windG.gain.setTargetAtTime((FLY.on ? 0.07 + P.spd*0.1 : 0.012) * under, SND.ctx.currentTime, 0.3);
+  AMB.nightG.gain.setTargetAtTime(GS.night && !GS.under && h > 0.3 ? 0.02 : 0, SND.ctx.currentTime, 0.8);
+}
+
+/* --- Mezdeke tarzı uçuş müziği -------------------------------------------
+   Hicaz dizisi (re, mi bemol, fa diyez, sol, la, si bemol, do) ve darbuka
+   düzeni: düm-tek-ka. Hepsi osilatörle çalınıyor, ezgi her turda biraz
+   değişiyor ki tekrar etmesin.                                           */
+const HICAZ = [0, 1, 4, 5, 7, 8, 11, 12, 13, 16, 17, 19];   /* yarım ton */
+const MUS = { next:0, step:0, bar:0, timer:null, root:146.83 };   /* re2 */
+function musNote(f, t0, dur, vol, type, detune){
+  const ctx = SND.ctx, o = ctx.createOscillator(), g = ctx.createGain(), fl = ctx.createBiquadFilter();
+  o.type = type || 'sawtooth';
+  o.frequency.setValueAtTime(f, t0);
+  if(detune) o.detune.setValueAtTime(detune, t0);
+  fl.type = 'lowpass';
+  fl.frequency.setValueAtTime(900 + vol*5200, t0);
+  fl.frequency.exponentialRampToValueAtTime(700, t0 + dur);
+  fl.Q.value = 6;
+  env(g, t0, 0.012, dur*0.35, vol, vol*0.4, dur*0.7);
+  o.connect(fl); fl.connect(g); g.connect(SND.mus);
+  o.start(t0); o.stop(t0 + dur + 0.1);
+}
+function darbuka(kind, t0, vol){
+  const ctx = SND.ctx;
+  if(kind === 'dum'){
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(190, t0);
+    o.frequency.exponentialRampToValueAtTime(62, t0 + 0.16);
+    env(g, t0, 0.004, 0.05, vol, vol*0.3, 0.18);
+    o.connect(g); g.connect(SND.mus);
+    o.start(t0); o.stop(t0 + 0.3);
+    noiseBurst(t0, 0.07, vol*0.25, 600, 180, 1.0, SND.mus);
+  }else{
+    noiseBurst(t0, kind === 'tek' ? 0.07 : 0.05, vol*(kind === 'tek' ? 0.5 : 0.3),
+               kind === 'tek' ? 2600 : 3600, 1400, 3.2, SND.mus);
+  }
+}
+/* 16'lık ızgarada bir ölçü: düm . ka tek  . ka düm tek ... */
+const PAT = ['dum', 0, 'ka', 'tek', 0, 'ka', 'dum', 0, 'dum', 0, 'ka', 'tek', 0, 'tek', 'ka', 0];
+function musSchedule(){
+  if(!SND.ready) return;
+  const ctx = SND.ctx;
+  const bpm = 128, spb = 60/bpm, st = spb/4;          /* 16'lık */
+  if(MUS.next < ctx.currentTime) MUS.next = ctx.currentTime + 0.06;
+  while(MUS.next < ctx.currentTime + 0.25){
+    const t0 = MUS.next, i = MUS.step % 16;
+    const hit = PAT[i];
+    if(hit) darbuka(hit, t0, hit === 'dum' ? 0.5 : 0.34);
+    /* bas: ölçü başı ve ortası */
+    if(i === 0 || i === 8) musNote(MUS.root/2, t0, spb*0.9, 0.17, 'triangle');
+    /* ezgi: sekizlikte bir, hicaz dizisinden yürüyen bir cümle */
+    if(i % 2 === 0){
+      const bar = MUS.bar % 4;
+      const seq = [[0,2,3,4,3,2,0,-1],[4,3,2,3,4,5,4,3],[0,2,4,5,7,5,4,2],[4,2,1,0,1,2,0,-1]][bar];
+      const d = seq[(i/2) | 0];
+      if(d >= 0){
+        const semi = HICAZ[Math.min(HICAZ.length - 1, d)];
+        const f = MUS.root*Math.pow(2, semi/12)*2;
+        musNote(f, t0, st*1.7, 0.2, 'sawtooth', 6);
+        musNote(f, t0, st*1.7, 0.09, 'square', -8);
+        /* süsleme: ara sıra çarpma nota */
+        if(Math.random() < 0.22){
+          const f2 = MUS.root*Math.pow(2, HICAZ[Math.min(HICAZ.length - 1, d + 1)]/12)*2;
+          musNote(f2, t0 - st*0.28, st*0.3, 0.12, 'sawtooth');
+        }
+      }
+    }
+    MUS.next += st;
+    MUS.step++;
+    if(MUS.step % 16 === 0) MUS.bar++;
+  }
+}
+function musicOn(v){
+  if(!SND.ready) return;
+  SND.musicOn = v;
+  SND.mus.gain.setTargetAtTime(v ? 0.5 : 0, SND.ctx.currentTime, v ? 0.5 : 0.35);
+  if(v && !MUS.timer){
+    MUS.next = SND.ctx.currentTime + 0.08; MUS.step = 0; MUS.bar = 0;
+    MUS.timer = setInterval(musSchedule, 40);
+    musSchedule();
+  }else if(!v && MUS.timer){
+    setTimeout(() => { if(!SND.musicOn && MUS.timer){ clearInterval(MUS.timer); MUS.timer = null; } }, 700);
   }
 }
 
@@ -6818,6 +7100,7 @@ function animate(){
   updateNPC(dt, t);
   updateLife(dt, t);
   updateTour(dt);
+  ambTick(dt);
   updateShots(dt);
   lootNear(dt, t);
   /* Kenar erimesi adım adım büyüsün diye altı metre yerine bir
@@ -7225,6 +7508,7 @@ picksEl.addEventListener('click', e => {
 $('start').addEventListener('click', () => {
   if(started) return;
   started = true;
+  sndInit(); sndToggle(SND.on);
   keepAwake();
   if(MOBILE && !document.fullscreenElement && document.documentElement.requestFullscreen && !IOS){
     document.documentElement.requestFullscreen({ navigationUI:'hide' }).catch(() => {});
@@ -7244,7 +7528,7 @@ setTimeout(() => {
 
 window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS, IN,
                        VILL, PETS, TUNA, MURAT, BROOMS, FLY, mountBroom, dismountBroom,
-                       HOOPS, RINGS, TOUR, BASKET,
+                       HOOPS, RINGS, TOUR, BASKET, SND, sfx, musicOn, sndToggle,
                        setTime, setMode, flyTo, toast, interact, throwStone, toggleTorch, switchKid,
                        scene, camera, renderer, THREE, setFx, fx:() => fxOn, cam:() => ({ camYaw, camPitch, camDist }),
                        post:() => ({ composer, stylize, bloom, applyGrade, toonMats, RAMP, RAMP_SOFT, RAMP_HARD, hemi, sun }),
@@ -7259,7 +7543,7 @@ window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS,
    önbelleğe hiç uğramadan soruyor; kendi numarasıyla uyuşmuyorsa bütün
    önbellekleri ve servis çalışanlarını silip bir kez yeniden yükleniyor.
    Döngüye girmesin diye tek seferlik bir işaret bırakıyor.               */
-const BUILD = '19.10.2026 15:17';
+const BUILD = '19.10.2026 15:30';
 /* Başlık ekranındaki damga elle yazılıyordu ve geride kalabiliyordu;
    artık yapı numarasının kendisinden yazılıyor.                          */
 { const el = document.getElementById('build'); if(el) el.textContent = 'sürüm ' + BUILD; }

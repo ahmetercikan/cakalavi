@@ -42,6 +42,25 @@ Oyun yalnızca dokunmatik oynanır; arayüzde klavye tuşu geçmez.
   sırayla geçmek süreli bir tur oyunu
 - **Pota:** sahanın yakınında taş atışı kendiliğinden kavise döner, çember sayar
 
+## Ses
+
+Oyunun bütün sesi tarayıcıda, Web Audio ile yerinde üretiliyor — tek bir
+dosya indirilmiyor. Kurulumda bir kez pembe gürültü tamponu yazılıyor,
+geri kalan her şey osilatör ve zarf: adımlar (kumda daha yumuşak), zıplama
+ve iniş, suya giriş ve dalış, ganimet, para, taş atışı, potadan geçen sayı,
+süpürge halkası, kedi miyavı, köpek havlaması, gece çakal uluması. Üstüne
+bir ortam katmanı: denize yaklaştıkça kabaran dalga, rüzgâr, gece böcekleri.
+
+Süpürgeye binince arkada **mezdeke tarzı** bir parça çalıyor. O da canlı
+üretiliyor: hicaz dizisi (re–mi bemol–fa diyez–sol–la–si bemol–do) üzerinde
+yürüyen bir ezgi, altında darbuka düzeni (düm-tek-ka), 128 vuruş. Ezgi her
+ölçüde değişiyor ve ara sıra çarpma nota düşüyor ki tekrar etmesin. Süpürgeden
+inince eriyerek susuyor.
+
+Ses sağ üstteki hoparlör düğmesiyle (ya da **S**) kapatılır, tercih
+hatırlanır. Tarayıcılar sesi ilk dokunuştan önce açtırmadığı için ses
+bağlamı "Başla"da kuruluyor.
+
 ## Teknik
 
 Tek dosya (`index.html`) + harita verisi (`world.json`) + `assets/` altında birkaç
