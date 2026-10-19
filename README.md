@@ -16,11 +16,14 @@ Oyun yalnızca dokunmatik oynanır; arayüzde klavye tuşu geçmez.
 - **Sol altta sabit yön çubuğu:** başparmağını üstüne koy, istediğin yöne it; kenara dayanınca koşar
 - Telefonda arayüz köşelere toplanır: sağ üstteki araç rayı tek bir menü düğmesinin
   arkasında durur, çanta ve karakter değiştirme oraya taşınmıştır, alt düğmeler
-  beş tanedir. 390×844 bir telefonda arayüzün kapladığı alan %39'dan %23'e,
-  yatayda %35'ten %19'a indi
+  ikidir. 390×844 bir telefonda arayüzün kapladığı alan %39'dan %19'a,
+  yatayda %35'ten %17'ye indi
 - **Ekrana bir kez dokun:** zıpla
+- **Alttaki şerit:** yakınında bir şey varken çıkar, ona dokununca etkileşirsin —
+  ayrı bir "etkileş" tuşu yok
 - **Ekranı sürükle:** kamerayı çevir; iki parmak → yakınlaş
-- **Sağ alt:** dal, zıpla, fener, taş, çanta, Ali↔Alya ve büyük etkileşim tuşu (yakında bir yer varsa yanar)
+- **Sağ alt:** taş ve fener. Yüksel/Alçal yalnız suda ve süpürgedeyken çıkar;
+  çanta ve karakter değiştirme sağ üstteki menüde
 - Dikey ve yatay yerleşim ayrı ayrı tasarlandı; çentik/ev düğmesi güvenli alanları gözetilir.
   Telefon (360×800, 390×844, 412×915), küçük yatay (667×375), tablet (768×1024,
   820×1180, 1180×820) ölçülerinde dikey ve yatay olarak ölçüldü: hiçbir parça

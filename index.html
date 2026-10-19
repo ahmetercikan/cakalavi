@@ -284,13 +284,21 @@ button:focus-visible,[role="button"]:focus-visible{outline:2px solid var(--teal)
 .sl .pips i.full{background:var(--brass)}
 
 /* ---- etkileşim bildirimi ---- */
+/* Şerit bilgi kutusuydu; yanına gelince ayrıca bir "Etkileş" düğmesine
+   basmak gerekiyordu. Artık şeridin kendisi düğme: ne yazıyorsa ona
+   dokunuyorsun.                                                         */
 #prompt{
   position:fixed; z-index:22; left:50%; bottom:calc(140px + env(safe-area-inset-bottom,0px));
   transform:translateX(-50%); display:flex; align-items:center; gap:9px;
   font-size:13px; padding:8px 15px 8px 8px; border-radius:999px;
   background:rgba(5,22,32,.9); border:1px solid rgba(58,208,196,.4); box-shadow:var(--lift);
-  animation:pin .22s ease;
+  animation:pin .22s ease; color:inherit; font-family:inherit; text-align:left;
+  cursor:pointer; pointer-events:auto; touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
 }
+#prompt:active{background:rgba(58,208,196,.3); transform:translateX(-50%) scale(.97)}
+body.touch #prompt{padding:10px 18px 10px 10px; font-size:14px;
+  border-color:rgba(58,208,196,.7); box-shadow:0 0 26px -8px rgba(58,208,196,.8), var(--lift)}
 @keyframes pin{from{opacity:0; transform:translateX(-50%) translateY(6px)}to{opacity:1; transform:translateX(-50%)}}
 #prompt .key{
   width:26px; height:26px; border-radius:8px; display:grid; place-items:center; flex:0 0 auto;
@@ -577,9 +585,14 @@ body.touch #tbtns{display:grid}
 /* Alt kontroller ekranın dörtte birini kaplıyordu: üç sütun x üç sıra
    düğme, yanında 118 pikselik çubuk. Artık çanta ve değiştirme rayda,
    kalan beş düğme iki sıraya sığıyor, çubuk küçüldü.                     */
+/* "Etkileş" kalktı: artık ipucu şeridine dokunuluyor. "Zıpla" da kalktı:
+   ekrana dokununca zaten zıplanıyor. Yüksel/Alçal yalnız gerektiği
+   yerde -- suda ve süpürgede -- görünüyor. Normal yürürken sağ altta
+   iki düğme kalıyor.                                                    */
 body.touch #tb-bag, body.touch #tb-swap{display:none}
-body.touch #tbtns{grid-template-columns:repeat(3, var(--tb)); gap:8px}
-body.touch #tbtns .big{grid-column:3; grid-row:1 / span 2}
+body.touch #tbtns{grid-template-columns:repeat(2, var(--tb)); gap:8px; justify-items:end}
+#tbtns .ctx{display:none}
+body.ctrl-updown #tbtns .ctx{display:grid}
 
 /* dikey telefon: HUD sadeleşir, kontroller büyür */
 @media (orientation:portrait){
@@ -628,8 +641,11 @@ body.touch #tbtns .big{grid-column:3; grid-row:1 / span 2}
   body.touch .ident .who{font-size:14px}
   body.touch .ident .place,body.touch .ident .lvl{display:none}
 }
-/* tablet: daha geniş yerleşim, dokunma hedefleri büyük kalır */
-@media (min-width:820px) and (pointer:coarse){
+/* Tablet kuralı yalnız enden bakıyordu: 844x390 bir telefon yatay
+   çevrilince "tablet" sayılıp radar açılıyor, çubuk ve düğmeler
+   büyüyordu -- ekran doluyor, radar da boşuna çiziliyordu. Artık
+   yükseklik de şart.                                                    */
+@media (min-width:820px) and (min-height:700px) and (pointer:coarse){
   body.touch #tbtns{--tb:70px}
   body.touch #radar{display:block; width:150px; height:150px; bottom:calc(16px + env(safe-area-inset-bottom,0px)); right:calc(250px + env(safe-area-inset-right,0px))}
   body.touch #touch{--joy:164px}
@@ -930,7 +946,7 @@ body.touch #tbtns .big{grid-column:3; grid-row:1 / span 2}
   <div class="pane belt flat" id="belt"></div>
 </div>
 
-<div id="prompt" hidden></div>
+<button id="prompt" hidden></button>
 <div id="feed"></div>
 
 <div id="modal" hidden>
@@ -949,9 +965,8 @@ body.touch #tbtns .big{grid-column:3; grid-row:1 / span 2}
   <div id="movezone"><div id="joy"><div id="joy-k"></div></div></div>
 </div>
 <div id="tbtns">
-  <button id="tb-dive"><svg class="ico"><use href="#i-dive"/></svg><span class="n">Dal</span></button>
-  <button id="tb-jump"><svg class="ico"><use href="#i-jump"/></svg><span class="n">Zıpla</span></button>
-  <button id="tb-e" class="big"><svg class="ico"><use href="#i-hand"/></svg><span class="n">Etkileş</span></button>
+  <button id="tb-dive" class="ctx"><svg class="ico"><use href="#i-dive"/></svg><span class="n">Alçal</span></button>
+  <button id="tb-jump" class="ctx"><svg class="ico"><use href="#i-jump"/></svg><span class="n">Yüksel</span></button>
   <button id="tb-torch"><svg class="ico"><use href="#i-torch"/></svg><span class="n">Fener</span></button>
   <button id="tb-stone"><svg class="ico"><use href="#i-rock"/></svg><span class="n">Taş</span></button>
   <button id="tb-bag"><svg class="ico"><use href="#i-bag"/></svg><span class="n">Çanta</span></button>
@@ -970,10 +985,11 @@ body.touch #tbtns .big{grid-column:3; grid-row:1 / span 2}
     <p class="legend">
       <span><kbd>Sol alt</kbd><b>yön çubuğu — ittikçe koşar</b></span>
       <span><kbd>Ekrana dokun</kbd><b>zıpla</b></span>
+      <span><kbd>Alttaki şerit</kbd><b>etkileşim</b></span>
       <span><kbd>Ekranı sürükle</kbd><b>etrafına bak</b></span>
       <span><kbd>İki parmak</kbd><b>yakınlaş</b></span>
-      <span><kbd>Sağ alt</kbd><b>dal · taş · fener · çanta</b></span>
-      <span><kbd>Büyük tuş</kbd><b>etkileşim</b></span>
+      <span><kbd>Sağ alt</kbd><b>taş · fener</b></span>
+      <span><kbd>Sağ üst</kbd><b>menü · çanta · karakter</b></span>
     </p>
   </div>
 </div>
@@ -4852,7 +4868,7 @@ function mountBroom(b){
   FLY.mateBroom.visible = true;
   addStat('ucus', 1);
   sfx('mount'); musicOn(true);
-  feed('Süpürgeye bindin — Zıpla yüksel, Dal alçal', { icon:'jump', hold:4200 });
+  feed('Süpürgeye bindin — sağ alttaki Yüksel ve Alçal', { icon:'jump', hold:4200 });
   say(GS.who, 'Tutun Alya, kalkıyoruz!', 3);
   checkQuests();
 }
@@ -5184,7 +5200,8 @@ function helpHTML(){
   return `<p class="note">Üçüncü şahıs oynanır: Ali ya da Alya’yı yürütürsün, diğeri peşinden gelir.</p>
     <div class="sect"><h4>Kontroller</h4><div class="ln"></div></div>
     ${key('Sol alttaki yön çubuğu', 'başparmağını üstüne koy, istediğin yöne it — kenara dayanırsan koşarsın')}
-    ${key('Süpürge', 'yanına git, Etkileş’e bas — Zıpla yüksel, Dal alçal, Etkileş in')}
+    ${key('Etkileşim', 'yakınında bir şey varken alttaki şeride dokun — başka tuş yok')}
+    ${key('Süpürge', 'şeride dokun bin — Yüksel/Alçal tuşları süpürgede ve suda çıkar')}
     ${key('Ses', 'sağ üstteki hoparlör (S)')}
     ${key('Ekrana bir kez dokun', 'zıpla')}
     ${key('Ekranı sürükle', 'etrafına bak · iki parmak yakınlaştırır')}
@@ -5905,7 +5922,7 @@ const buzz = ms => { try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e)
     if(up2){ el.addEventListener('pointerup', up2); el.addEventListener('pointercancel', up2); }
     el.addEventListener('contextmenu', e => e.preventDefault());
   };
-  bind('tb-e', () => interact());
+  bind('prompt', () => interact());
   bind('tb-stone', () => throwStone());
   bind('tb-torch', () => toggleTorch());
   bind('tb-bag', () => (UI.modal.hidden ? openModal('bag') : closeModal()));
@@ -5917,13 +5934,13 @@ const buzz = ms => { try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e)
 /* büyük eylem tuşu bağlama göre yanar */
 function paintTouchButtons(){
   if(!document.body.classList.contains('touch')) return;
-  const e = $('tb-e');
-  e.classList.toggle('hot', !!nearSpot || !!nearLife || !!nearBroom || FLY.on ||
-                            (nearShore && GS.stones < GS.maxStones));
+  /* Yüksel/Alçal yalnız suda ve süpürgede işe yarıyor; başka zaman
+     yerlerini boşuna kaplamasınlar.                                     */
+  document.body.classList.toggle('ctrl-updown', P.swim || FLY.on);
   $('tb-torch').classList.toggle('lock', !GS.gear.fener);
   $('tb-torch').classList.toggle('on', GS.gear.fener && GS.tool === 'fener');
   $('tb-stone').classList.toggle('lock', GS.stones === 0);
-  $('tb-dive').classList.toggle('on', P.swim);
+  $('tb-dive').classList.toggle('on', P.dive);
 }
 
 /* tam ekran, uyku engeli, ana ekrana ekleme */
@@ -5956,6 +5973,7 @@ $('b-swap').addEventListener('click', () => switchKid());
 
 /* ---------- radar: oyuncu merkezli, dönen pusulalı mini harita ---------- */
 const mini = $('mini');
+const radarEl = $('radar');
 const mctx = mini.getContext('2d');
 const MB = 1.5;                                  /* temel haritanın görüntü-pikseli başına piksel */
 const RADAR_R = 118;                             /* metre */
@@ -7350,7 +7368,7 @@ function animate(){
                      (FLY.on || nearBroom || nearLife || nearSpot || (nearShore && GS.stones < GS.maxStones));
   if(wantPrompt){
     const txt = FLY.on ? ['İn', 'Süpürgeyi bırak']
-              : nearBroom ? ['Süpürgeye bin', 'Zıpla yüksel · Dal alçal']
+              : nearBroom ? ['Süpürgeye bin', 'Yüksel ve Alçal tuşları çıkar']
               : nearLife ? (nearLife.cat !== undefined ? [nearLife.name, 'sev']
                                                        : [nearLife === MURAT ? 'Ayı Murat' : 'Komşu', 'selam ver'])
               : nearSpot ? [nearSpot.name, nearSpot.hint]
@@ -7365,7 +7383,9 @@ function animate(){
 
   if((miniTick % 2) === 0) paintCompass();
   if((miniTick++ % 4) === 0){
-    paintMini();
+    /* radar telefonda gizli: gizliyken her dört karede bir boşuna
+       çiziliyordu                                                       */
+    if(radarEl.offsetWidth > 0) paintMini();
     coordsEl.textContent = nearestStreet(P.x, P.z);
     const showB = P.swim || GS.breath < 0.999;
     UI.breathWrap.hidden = !showB;
@@ -7634,7 +7654,7 @@ window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS,
    önbelleğe hiç uğramadan soruyor; kendi numarasıyla uyuşmuyorsa bütün
    önbellekleri ve servis çalışanlarını silip bir kez yeniden yükleniyor.
    Döngüye girmesin diye tek seferlik bir işaret bırakıyor.               */
-const BUILD = '19.10.2026 16:33';
+const BUILD = '19.10.2026 18:07';
 /* Başlık ekranındaki damga elle yazılıyordu ve geride kalabiliyordu;
    artık yapı numarasının kendisinden yazılıyor.                          */
 { const el = document.getElementById('build'); if(el) el.textContent = 'sürüm ' + BUILD; }
