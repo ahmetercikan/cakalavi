@@ -1,11 +1,18 @@
 /* Çakal Avı — çevrimdışı önbellek.
-   Oyun dosyaları kurulumda, three.js gibi dış kaynaklar ilk kullanımda saklanır. */
-const V = 'cakalavi-v8';
+   Oyun dosyaları kurulumda, three.js gibi dış kaynaklar ilk kullanımda saklanır.
+
+   Dikkat: GitHub Pages HTML'i "max-age=600" ile veriyor, yani tarayıcı on
+   dakika boyunca eski sayfayı ağa hiç sormadan sunabiliyor. Bu yüzden HTML
+   ve harita verisi {cache:'reload'} ile isteniyor — tarayıcı önbelleği
+   atlanıyor, cevap bizim önbelleğimize yazılıyor.                          */
+const V = 'cakalavi-v9';
 const CORE = ['./', './index.html', './world.json', './manifest.webmanifest',
               './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(V).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(V)
+    .then(c => c.addAll(CORE.map(u => new Request(u, { cache:'reload' }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
@@ -14,16 +21,20 @@ self.addEventListener('activate', e => {
     .then(() => self.clients.claim()));
 });
 
+self.addEventListener('message', e => { if(e.data === 'skip') self.skipWaiting(); });
+
 self.addEventListener('fetch', e => {
   const req = e.request;
   if(req.method !== 'GET') return;
   const url = new URL(req.url);
   const sameOrigin = url.origin === location.origin;
+  const fresh = sameOrigin && (url.pathname.endsWith('.html') || url.pathname.endsWith('/')
+                || url.pathname.endsWith('world.json'));
 
-  /* oyun dosyaları: önce ağ, olmazsa önbellek (güncel kalsın ama çevrimdışı da açılsın) */
-  if(sameOrigin && (url.pathname.endsWith('.html') || url.pathname.endsWith('/') || url.pathname.endsWith('world.json'))){
+  /* oyun dosyaları: önce ağ (tarayıcı önbelleği atlanarak), olmazsa önbellek */
+  if(fresh){
     e.respondWith(
-      fetch(req).then(res => {
+      fetch(new Request(req.url, { cache:'reload', credentials:'same-origin' })).then(res => {
         const copy = res.clone();
         caches.open(V).then(c => c.put(req, copy)).catch(() => {});
         return res;
@@ -31,14 +42,17 @@ self.addEventListener('fetch', e => {
     );
     return;
   }
-  /* diğer her şey: önce önbellek */
+  /* diğer her şey: önce önbellek, yoksa ağ */
   e.respondWith(
-    caches.match(req).then(hit => hit || fetch(req).then(res => {
-      if(res && (res.ok || res.type === 'opaque')){
-        const copy = res.clone();
-        caches.open(V).then(c => c.put(req, copy)).catch(() => {});
-      }
-      return res;
-    }).catch(() => hit))
+    caches.match(req).then(hit => {
+      if(hit) return hit;
+      return fetch(req).then(res => {
+        if(res && (res.ok || res.type === 'opaque')){
+          const copy = res.clone();
+          caches.open(V).then(c => c.put(req, copy)).catch(() => {});
+        }
+        return res;
+      }).catch(() => new Response('', { status:504, statusText:'çevrimdışı' }));
+    })
   );
 });

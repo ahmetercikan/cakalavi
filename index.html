@@ -654,6 +654,8 @@ body.touch #tbtns{display:grid}
 .pick b{display:block; font-family:var(--display); font-size:17px; font-weight:700}
 .pick small{display:block; font-size:11px; color:var(--bone-3); margin-top:3px; line-height:1.35}
 #title .go{padding:13px 34px; font-size:14.5px; border-radius:13px}
+.build{margin:12px 0 0; text-align:center; font-family:var(--mono); font-size:9.5px;
+  letter-spacing:.08em; color:rgba(246,236,217,.3)}
 .legend{
   display:flex; flex-wrap:wrap; gap:6px 14px; justify-content:center; margin:18px 0 0;
   font-family:var(--mono); font-size:10.5px; color:var(--bone-3);
@@ -877,6 +879,7 @@ body.touch #tbtns{display:grid}
     <p class="lede">Ali ve Alya bütün yazı koyda geçiriyor: kabuk, mineralli taş, bir de kimsenin istemediği delik otel terliği — hepsi ganimet. Akşam büfede satılır, gece el feneriyle çakal avına çıkılır. Kim oynuyor?</p>
     <div class="picks" id="picks"></div>
     <button class="btn go" id="start">Başla</button>
+    <p class="build">sürüm 19.10.2026 11:18</p>
     <p class="legend">
       <span><kbd>Sol alt</kbd><b>yön çubuğu — ittikçe koşar</b></span>
       <span><kbd>Ekrana dokun</kbd><b>zıpla</b></span>
@@ -5756,9 +5759,23 @@ window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS,
                        ground:{ terrainH, roadLevel, groundAt, blocked, blockRoad },
                        setCam:(y, p2, d) => { camYaw = y; if(p2 !== undefined) camPitch = p2; if(d !== undefined) camDist = d; } };
 /* çevrimdışı oynanabilsin diye servis çalışanı — sadece kendi alan adında */
+/* Yeni sürüm yayınlandığında eski sayfa açık kalmasın: servis çalışanı
+   değiştiği anda sayfa bir kez kendini yeniliyor.                        */
 if('serviceWorker' in navigator && location.protocol === 'https:'){
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if(reloaded) return; reloaded = true; location.reload();
+  });
   addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      reg.addEventListener('updatefound', () => {
+        const w = reg.installing;
+        if(w) w.addEventListener('statechange', () => {
+          if(w.state === 'installed' && navigator.serviceWorker.controller) w.postMessage('skip');
+        });
+      });
+      reg.update().catch(() => {});
+    }).catch(() => {});
   });
 }
 
