@@ -733,6 +733,34 @@ body.ctrl-updown #tbtns .ctx{display:grid}
   #title .box{padding:14px 14px 12px}
   .pick small{display:none}
 }
+#title .online{margin-top:16px; padding-top:14px; border-top:1px solid var(--hair-2)}
+#title .online .eyebrow{margin-bottom:9px}
+.orow{display:flex; gap:8px; align-items:center; justify-content:center; flex-wrap:wrap}
+.orow .osep{font-size:11px; color:var(--bone-3)}
+.btn.ghost{background:rgba(246,236,217,.06); border:1px solid var(--hair-2); color:var(--bone);
+  padding:9px 14px; font-size:12.5px; border-radius:11px; cursor:pointer}
+.btn.ghost:hover{background:rgba(246,236,217,.12)}
+.btn.ghost[disabled]{opacity:.45; cursor:default}
+#o-code{width:116px; padding:9px 10px; border-radius:11px; text-align:center; letter-spacing:.22em;
+  font-family:var(--mono); font-size:13px; text-transform:uppercase;
+  background:rgba(4,18,27,.7); border:1px solid var(--hair-2); color:var(--bone)}
+#o-code::placeholder{letter-spacing:.14em; color:var(--bone-3); opacity:.7}
+.ostat{margin:10px auto 0; max-width:46ch; font-size:11.5px; line-height:1.5; color:var(--bone-3)}
+.ostat.big{font-family:var(--mono); font-size:19px; letter-spacing:.3em; color:var(--teal)}
+.ostat.ok{color:var(--teal)}
+.ostat.bad{color:var(--coral)}
+#netbadge{position:fixed; z-index:21; left:50%; transform:translateX(-50%);
+  top:calc(10px + env(safe-area-inset-top,0px)); display:flex; align-items:center; gap:7px;
+  padding:5px 12px; border-radius:999px; font-size:11.5px; pointer-events:none;
+  background:rgba(5,22,32,.72); border:1px solid var(--hair-2); backdrop-filter:blur(8px)}
+#netbadge .dot{width:7px; height:7px; border-radius:50%; background:var(--teal);
+  box-shadow:0 0 8px var(--teal)}
+#netbadge.off .dot{background:var(--coral); box-shadow:0 0 8px var(--coral)}
+#netbadge small{font-family:var(--mono); font-size:9.5px; color:var(--bone-3)}
+body.touch #netbadge{top:calc(84px + env(safe-area-inset-top,0px))}
+@media (orientation:landscape) and (max-height:520px){
+  body.touch #netbadge{top:calc(46px + env(safe-area-inset-top,0px))}
+}
 #title .eyebrow{font-family:var(--mono); font-size:10px; letter-spacing:.3em; text-transform:uppercase; color:var(--teal); margin:0}
 #title h2{font-family:var(--display); font-size:clamp(28px,5.4vw,42px); font-weight:700; margin:8px 0 6px; line-height:1}
 #title .lede{font-size:13px; color:var(--bone-2); margin:0 auto 20px; max-width:50ch; line-height:1.55}
@@ -946,6 +974,7 @@ body.ctrl-updown #tbtns .ctx{display:grid}
   <div class="pane belt flat" id="belt"></div>
 </div>
 
+<div id="netbadge" hidden><span class="dot"></span><b id="net-who"></b><small id="net-ping"></small></div>
 <button id="prompt" hidden></button>
 <div id="feed"></div>
 
@@ -981,6 +1010,17 @@ body.ctrl-updown #tbtns .ctx{display:grid}
     <p class="lede">Ali ve Alya bütün yazı koyda geçiriyor: kabuk, mineralli taş, bir de kimsenin istemediği delik otel terliği — hepsi ganimet. Akşam büfede satılır, gece el feneriyle çakal avına çıkılır. Kim oynuyor?</p>
     <div class="picks" id="picks"></div>
     <button class="btn go" id="start">Başla</button>
+    <div class="online" id="online">
+      <p class="eyebrow">İki kişi · aynı anda</p>
+      <div class="orow">
+        <button class="btn ghost" id="o-host">Oda kur</button>
+        <span class="osep">ya da</span>
+        <input id="o-code" placeholder="ODA KODU" maxlength="5" autocomplete="off" spellcheck="false">
+        <button class="btn ghost" id="o-join">Katıl</button>
+      </div>
+      <p class="ostat" id="o-stat">Bir oda kur, kodu arkadaşına ver; o katılınca ikiniz
+        aynı Denizkent'te olursunuz. Sen seçtiğin karakteri oynarsın, o diğerini.</p>
+    </div>
     <p class="build" id="build">sürüm</p>
     <p class="legend">
       <span><kbd>Sol alt</kbd><b>yön çubuğu — ittikçe koşar</b></span>
@@ -1118,6 +1158,13 @@ const pick = arr => arr[Math.floor(rand()*arr.length)];
 const SND = {
   ctx:null, master:null, sfx:null, mus:null, noise:null,
   on:(localStorage.getItem('dk-snd') !== '0'), ready:false, musicOn:false,
+};
+/* Ağ durumu da erken: setTime açılışta bir kez çağrılıyor ve içinde
+   NET'e bakıyor; const ölü bölgede kalırsa orada patlar.              */
+const NET = {
+  on:false, room:null, peerId:null, host:false, code:'',
+  sendState:null, sendEv:null, last:0, rxT:0, ping:0,
+  rx:null, prev:null, lerpT:0, mateFly:false,
 };
 
 /* ---------------- sahne ---------------- */
@@ -4984,6 +5031,7 @@ function mountBroom(b){
   if(!FLY.mateBroom){ FLY.mateBroom = makeBroom(); scene.add(FLY.mateBroom); }
   FLY.mateBroom.visible = true;
   addStat('ucus', 1);
+  netSend({ k:'broom', i:BROOMS.indexOf(b), on:true });
   sfx('mount'); musicOn(true);
   feed('Süpürgeye bindin — sağ alttaki Yüksel ve Alçal', { icon:'jump', hold:4200 });
   say(GS.who, 'Tutun Alya, kalkıyoruz!', 3);
@@ -5001,6 +5049,7 @@ function dismountBroom(){
     b.x = P.x; b.z = P.z; b.y = groundAt(P.x, P.z);
     b.o.position.set(b.x, b.y + 0.42, b.z);
     b.o.rotation.set(-0.95, P.face, 0);
+    netSend({ k:'broom', i:BROOMS.indexOf(b), on:false, p:[b.x, b.y, b.z] });
   }
   P.y = Math.max(P.y, groundAt(P.x, P.z));
   P.vy = 0;
@@ -5387,6 +5436,7 @@ function takeLoot(o){
   if(ITEMS[o.id].junk) addStat('junk', 1);
   if(o.water && P.dive) addStat('dived', 1);
   lootFeed(o.id); buzz(12);
+  netSend({ k:'loot', id:o.id, slot:o.slot });
   refreshHUD(); checkQuests();
   if(!o.home){ gridDel(o); const i = loot.indexOf(o); if(i >= 0) loot.splice(i, 1); lootFree[o.id].push(o.slot); }
 }
@@ -5436,7 +5486,9 @@ function throwStone(){
     const v = new THREE.Vector3((tx - from.x)/T, 0, (tz - from.z)/T);
     v.y = (aim.h.y + 0.5 - from.y)/T + 0.5*19*T;
     const sp = v.length();
-    spawnShot('stone', from, v.multiplyScalar(1/sp), sp);
+    const dv = v.multiplyScalar(1/sp);
+    spawnShot('stone', from, dv, sp);
+    netSend({ k:'stone', p:[from.x, from.y, from.z], d:[dv.x, dv.y, dv.z], s:sp });
     sfx('throw');
     KIDS[GS.who].userData.throwT = 0.42;
     refreshHUD();
@@ -5444,7 +5496,9 @@ function throwStone(){
   }
   const dir = new THREE.Vector3(-Math.sin(camYaw), 0, -Math.cos(camYaw));
   dir.y = 0.34 - camPitch*0.5; dir.normalize();
-  spawnShot('stone', from, dir, 22*PERK[GS.who].stone);
+  const sp2 = 22*PERK[GS.who].stone;
+  spawnShot('stone', from, dir, sp2);
+  netSend({ k:'stone', p:[from.x, from.y, from.z], d:[dir.x, dir.y, dir.z], s:sp2 });
   sfx('throw');
   KIDS[GS.who].userData.throwT = 0.42;
   refreshHUD();
@@ -5749,7 +5803,7 @@ addEventListener('keydown', e => {
   if(e.code === 'KeyS' && !e.repeat){ sndInit(); sndToggle(); }
   if(e.code === 'KeyI'){ e.preventDefault(); UI.modal.hidden ? openModal('bag') : closeModal(); }
   if(e.code === 'KeyF') toggleTorch();
-  if(e.code === 'KeyT') switchKid();
+  if(e.code === 'KeyT' && !NET.on) switchKid();
   if(e.code === 'KeyR') throwStone();
   if(e.code === 'KeyE') interact();
   if(e.code === 'KeyM') setMode(mode === 'play' ? 'orbit' : 'play');
@@ -5863,6 +5917,7 @@ const bubAli = bubbleFor(() => new THREE.Vector3(KIDS.ali.position.x, KIDS.ali.p
 const bubAlya = bubbleFor(() => new THREE.Vector3(KIDS.alya.position.x, KIDS.alya.position.y + 1.65, KIDS.alya.position.z));
 const bubNPC = NPC.map(n => bubbleFor(() => new THREE.Vector3(n.o.position.x, n.o.position.y + 2.0, n.o.position.z)));
 function say(who, text, dur){
+  if(NET.on && who === GS.who) netSend({ k:'say', t:text });
   const b = who === 'ali' ? bubAli : bubAlya;
   b.el.textContent = text; b.until = clock.elapsedTime + (dur || 2.6);
 }
@@ -5891,6 +5946,7 @@ function setTime(k){
   GS.night = k === 'night';
   for(const id of ['s-morning','s-noon','s-dusk','s-night'])
     document.getElementById(id).setAttribute('aria-pressed', id === 's-'+k);
+  if(typeof NET !== 'undefined' && NET.on && !setTime._fromNet) netSend({ k:'time', t:k });
   const d = new THREE.Vector3(...t.dir).normalize();
   sun.color.setHex(t.sun); sun.intensity = t.int*1.17;   /* toon bantları belirgin olsun diye güneş biraz güçlü */
   hemi.color.setHex(t.hemiSky); hemi.groundColor.setHex(t.hemiGnd);
@@ -6051,7 +6107,7 @@ const buzz = ms => { try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e)
   bind('tb-bag', () => (UI.modal.hidden ? openModal('bag') : closeModal()));
   bind('tb-jump', () => jump(), () => { IN.jump = false; });
   bind('tb-dive', () => { IN.dive = true; }, () => { IN.dive = false; });
-  bind('tb-swap', () => switchKid());
+  bind('tb-swap', () => (NET.on ? toast('Online oyunda karakter değişmez', 'bad') : switchKid()));
 })();
 
 /* büyük eylem tuşu bağlama göre yanar */
@@ -6092,7 +6148,7 @@ const railOpen = () => document.body.classList.contains('rail-open');
 $('rail-btn').addEventListener('click', e => { e.stopPropagation(); setRail(!railOpen()); sfx('ui'); });
 $('hud-tr').querySelector('.tool-rail').addEventListener('click', () => setRail(false));
 $('b-bag').addEventListener('click', () => (UI.modal.hidden ? openModal('bag') : closeModal()));
-$('b-swap').addEventListener('click', () => switchKid());
+$('b-swap').addEventListener('click', () => (NET.on ? toast('Online oyunda karakter değişmez', 'bad') : switchKid()));
 
 /* ---------- radar: oyuncu merkezli, dönen pusulalı mini harita ---------- */
 const mini = $('mini');
@@ -6543,6 +6599,31 @@ function updatePlayer(dt, t){
     if(ud.pack) ud.pack.visible = GS.gear.file;
   }
 
+  /* Bağlıyken arkadaş karakteri yapay zekâ değil, karşıdaki oyuncu
+     sürüyor. Paket saniyede on iki geliyor, arada yumuşatılıyor.       */
+  if(NET.on && NET.peerId && NET.rx){
+    const r = NET.rx;
+    MATE.x = lp(MATE.x, r[0], dt*11);
+    MATE.y = lp(MATE.y, r[1], dt*11);
+    MATE.z = lp(MATE.z, r[2], dt*11);
+    let df = ((r[3] - MATE.face + Math.PI*3) % (Math.PI*2)) - Math.PI;
+    MATE.face += df*Math.min(1, dt*10);
+    MATE.spd = r[4];
+    const fl = r[5] | 0;
+    MATE.swim = !!(fl & 1);
+    const mateFly = !!(fl & 16);
+    other.position.set(MATE.x, MATE.y - (mateFly ? 0.46 : 0), MATE.z);
+    other.rotation.y = MATE.face + (mateFly ? Math.PI/2 : 0);
+    animKid(other, { spd:MATE.spd, swim:MATE.swim, dive:!!(fl & 2), air:!!(fl & 4),
+                     stun:(fl & 32) ? 0.5 : 0, torch:!!(fl & 8), fly:mateFly }, dt);
+    if(FLY.mateBroom){
+      FLY.mateBroom.visible = mateFly;
+      if(mateFly){ FLY.mateBroom.position.set(MATE.x, MATE.y, MATE.z);
+                   FLY.mateBroom.rotation.set(0, MATE.face, 0); }
+    }
+    for(const kk in KIDS){ const ud = KIDS[kk].userData; if(ud.pack) ud.pack.visible = GS.gear.file; }
+    return;
+  }
   /* arkadaş takip */
   const want = FLY.on ? 3.4 : 3.0;
   const ddx = P.x - MATE.x, ddz = P.z - MATE.z;
@@ -7443,6 +7524,147 @@ const FLIES = (() => {
   return { pts, uni };
 })();
 
+
+/* ---------- iki kişilik online oyun ---------------------------------------
+   Oyun GitHub Pages'te duran düz bir sayfa; arkasında sunucu yok. Bu yüzden
+   iki tarayıcı birbirine doğrudan bağlanıyor (WebRTC). Buluşmayı Trystero
+   hallediyor: iki taraf da aynı oda koduna girince açık nostr röleleri
+   üzerinden birbirlerini buluyor, ondan sonrası doğrudan bağlantı.
+
+   Odayı kuran seçtiği karakteri oynar, katılan diğerini alır. Dünya iki
+   tarafta da aynı tohumla kurulduğu için ağaç, ev ve ganimet aynı yerde;
+   ağdan yalnız oyuncunun durumu ve birkaç olay geçiyor. Çakallar ve
+   komşular iki tarafta ayrı ayrı işliyor -- kovalamaca kişisel.          */
+const NET_HZ = 12;
+const netCode = () => {
+  const A = 'ACDEFGHJKLMNPQRSTUVWXYZ2345679';
+  let c = '';
+  for(let i = 0; i < 5; i++) c += A[Math.floor(Math.random()*A.length)];
+  return c;
+};
+const oStat = (txt, cls) => {
+  const el = document.getElementById('o-stat');
+  el.textContent = txt;
+  el.className = 'ostat' + (cls ? ' ' + cls : '');
+};
+function netBadge(){
+  const el = document.getElementById('netbadge');
+  if(!NET.on){ el.hidden = true; return; }
+  el.hidden = false;
+  el.classList.toggle('off', !NET.peerId);
+  document.getElementById('net-who').textContent =
+    NET.peerId ? (GS.who === 'ali' ? 'Alya bağlı' : 'Ali bağlı') : 'bağlantı koptu';
+  document.getElementById('net-ping').textContent = NET.peerId ? NET.ping + ' ms' : '';
+}
+async function netStart(code, asHost){
+  if(NET.room) return;
+  NET.code = code; NET.host = asHost;
+  oStat('Bağlanılıyor…');
+  let joinRoom;
+  try{
+    ({ joinRoom } = await import('https://cdn.jsdelivr.net/npm/trystero@0.25.4/nostr/+esm'));
+  }catch(e){
+    oStat('Ağ kütüphanesi yüklenemedi — internet bağlantını kontrol et', 'bad');
+    return;
+  }
+  let room;
+  try{
+    room = joinRoom({ appId:'cakalavi-denizkent' }, 'dk-' + code);
+  }catch(e){
+    oStat('Odaya girilemedi: ' + (e && e.message ? e.message : e), 'bad');
+    return;
+  }
+  NET.room = room; NET.on = true;
+  /* 0.25'te geri çağrılar atanıyor, fonksiyona verilmiyor:
+     action.onMessage = fn, room.onPeerJoin = fn                        */
+  const st = room.makeAction('st'), ev = room.makeAction('ev');
+  NET.sendState = st.send; NET.sendEv = ev.send;
+
+  st.onMessage = (d, id) => {
+    if(!Array.isArray(d) || d.length < 6) return;
+    NET.peerId = id;
+    NET.prev = NET.rx;
+    NET.rx = d;
+    NET.rxT = performance.now();
+  };
+  ev.onMessage = (e, id) => { netEvent(e); };
+
+  /* gerçek gidiş-dönüş süresi: kütüphanenin kendi ping'i */
+  NET.pingTimer = setInterval(async () => {
+    if(!NET.peerId || !NET.room) return;
+    try{ NET.ping = Math.round(await NET.room.ping(NET.peerId)); }catch(e){}
+  }, 3000);
+  room.onPeerJoin = id => {
+    NET.peerId = id;
+    if(NET.host) NET.sendEv({ k:'role', who:GS.who, time:GS.night ? 'night' : timeKey });
+    netReady();
+  };
+  room.onPeerLeave = id => {
+    if(NET.peerId !== id) return;
+    NET.peerId = null;
+    netBadge();
+    if(started) toast('Arkadaşın ayrıldı — oyun tek kişiye döndü', 'bad');
+  };
+  oStat(asHost ? ('Oda kodu: ' + code + ' — arkadaşın bu kodla katılsın') : 'Odaya girildi, karşı taraf bekleniyor…',
+        asHost ? 'big' : '');
+  if(asHost) document.getElementById('o-code').value = code;
+}
+function netReady(){
+  netBadge();
+  oStat(GS.who === 'ali' ? 'Bağlandı · sen Ali’sin' : 'Bağlandı · sen Alya’sın', 'ok');
+  if(!started) setTimeout(() => { const b = document.getElementById('start'); if(b && !started) b.click(); }, 700);
+  else feed('Arkadaşın bağlandı', { icon:'star', hold:3000 });
+}
+/* karşı taraftan gelen olaylar */
+function netEvent(e){
+  if(!e || !e.k) return;
+  if(e.k === 'role'){
+    /* odayı kuran seçtiğini oynar, katılan diğerini alır */
+    const mine = e.who === 'ali' ? 'alya' : 'ali';
+    if(GS.who !== mine) swapTo(mine);
+    if(e.time) setTime(e.time);
+    netReady();
+  }
+  else if(e.k === 'loot'){
+    const o = loot.find(q => q.id === e.id && q.slot === e.slot && q.alive);
+    if(o){ o.alive = false; o.t = 0; setLoot(o, 0);
+      if(!o.home){ gridDel(o); const i = loot.indexOf(o); if(i >= 0) loot.splice(i, 1); lootFree[o.id].push(o.slot); } }
+  }
+  else if(e.k === 'stone'){
+    spawnShot('stone', new THREE.Vector3(e.p[0], e.p[1], e.p[2]),
+              new THREE.Vector3(e.d[0], e.d[1], e.d[2]), e.s);
+  }
+  else if(e.k === 'time'){ setTime._fromNet = true; setTime(e.t); setTime._fromNet = false; }
+  else if(e.k === 'say'){ say(GS.who === 'ali' ? 'alya' : 'ali', e.t, 3); }
+  else if(e.k === 'broom'){
+    const b = BROOMS[e.i];
+    if(b){
+      b.taken = e.on;
+      if(!e.on && e.p){ b.x = e.p[0]; b.z = e.p[2]; b.y = e.p[1];
+        b.o.position.set(b.x, b.y + 0.42, b.z); }
+    }
+    NET.mateFly = e.on;
+  }
+  else if(e.k === 'bye'){ NET.peerId = null; netBadge(); }
+}
+const netSend = e => { if(NET.on && NET.sendEv && NET.peerId) NET.sendEv(e); };
+/* sekme kapanırken odadan düzgün çık */
+addEventListener('pagehide', () => { try{ if(NET.room) NET.room.leave(); }catch(e){} });
+/* karakteri karşıdakine göre ayarla (online'da takas yok, atama var) */
+function swapTo(who){
+  if(GS.who === who) return;
+  switchKid(true);
+}
+function netTick(t){
+  if(!NET.on || !NET.sendState) return;
+  if(t - NET.last < 1/NET_HZ) return;
+  NET.last = t;
+  const f = (P.swim ? 1 : 0) | (P.dive ? 2 : 0) | ((!P.onGround && !P.swim && !FLY.on) ? 4 : 0)
+          | ((GS.tool === 'fener' && GS.gear.fener) ? 8 : 0) | (FLY.on ? 16 : 0) | (GS.stun > 0 ? 32 : 0);
+  NET.sendState([+P.x.toFixed(2), +P.y.toFixed(2), +P.z.toFixed(2),
+                 +P.face.toFixed(2), +P.spd.toFixed(2), f]);
+}
+
 /* ---------- animasyon ---------- */
 function animate(){
   requestAnimationFrame(animate);
@@ -7474,6 +7696,8 @@ function animate(){
   updateNPC(dt, t);
   updateLife(dt, t);
   updateTour(dt);
+  netTick(t);
+  if(NET.on && (miniTick % 30) === 0) netBadge();
   ambTick(dt);
   updateShots(dt);
   lootNear(dt, t);
@@ -7881,6 +8105,20 @@ picksEl.addEventListener('click', e => {
   if(who !== GS.who) switchKid(true);
   for(const el of picksEl.children) el.setAttribute('aria-pressed', el === b);
 });
+/* online paneli */
+(() => {
+  const host = $('o-host'), join = $('o-join'), code = $('o-code');
+  const lock = () => { host.disabled = join.disabled = true; code.disabled = true; };
+  host.addEventListener('click', () => { lock(); netStart(netCode(), true); });
+  join.addEventListener('click', () => {
+    const c = (code.value || '').trim().toUpperCase();
+    if(c.length < 4){ oStat('Kodu eksiksiz yaz (5 karakter)', 'bad'); return; }
+    lock(); netStart(c, false);
+  });
+  code.addEventListener('input', () => { code.value = code.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); });
+  code.addEventListener('keydown', e => { if(e.key === 'Enter') join.click(); });
+})();
+
 $('start').addEventListener('click', () => {
   if(started) return;
   started = true;
@@ -7904,7 +8142,7 @@ setTimeout(() => {
 
 window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS, IN,
                        VILL, PETS, TUNA, MURAT, BROOMS, FLY, mountBroom, dismountBroom,
-                       HOOPS, RINGS, TOUR, BASKET, SND, sfx, musicOn, sndToggle, WIND, CLOUD,
+                       HOOPS, RINGS, TOUR, BASKET, SND, sfx, musicOn, sndToggle, WIND, CLOUD, NET,
                        setTime, setMode, flyTo, toast, interact, throwStone, toggleTorch, switchKid,
                        scene, camera, renderer, THREE, setFx, fx:() => fxOn, cam:() => ({ camYaw, camPitch, camDist }),
                        post:() => ({ composer, stylize, bloom, applyGrade, toonMats, RAMP, RAMP_SOFT, RAMP_HARD, hemi, sun }),
@@ -7919,7 +8157,7 @@ window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS,
    önbelleğe hiç uğramadan soruyor; kendi numarasıyla uyuşmuyorsa bütün
    önbellekleri ve servis çalışanlarını silip bir kez yeniden yükleniyor.
    Döngüye girmesin diye tek seferlik bir işaret bırakıyor.               */
-const BUILD = '19.10.2026 18:22';
+const BUILD = '19.10.2026 18:52';
 /* Başlık ekranındaki damga elle yazılıyordu ve geride kalabiliyordu;
    artık yapı numarasının kendisinden yazılıyor.                          */
 { const el = document.getElementById('build'); if(el) el.textContent = 'sürüm ' + BUILD; }

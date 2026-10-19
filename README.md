@@ -52,6 +52,30 @@ Oyun yalnızca dokunmatik oynanır; arayüzde klavye tuşu geçmez.
   sırayla geçmek süreli bir tur oyunu
 - **Pota:** sahanın yakınında taş atışı kendiliğinden kavise döner, çember sayar
 
+## İki kişi online
+
+Oyun GitHub Pages'te duran düz bir sayfa; arkasında sunucu yok. Bu yüzden iki
+tarayıcı birbirine **doğrudan** bağlanıyor (WebRTC). Buluşmayı Trystero
+hallediyor: iki taraf da aynı oda koduna girince açık nostr röleleri üzerinden
+birbirlerini buluyor, ondan sonrası doğrudan bağlantı. Kütüphane yalnız online
+oynanacağı zaman indiriliyor, tek kişilik oyuna hiçbir maliyeti yok.
+
+- Başlık ekranında **Oda kur** → beş karakterlik bir kod çıkar, arkadaşına ver
+- Arkadaşın kodu yazıp **Katıl** der; bağlanınca oyun ikisinde de başlar
+- Odayı kuran seçtiği karakteri oynar, katılan diğerini alır. Online oyunda
+  karakter değiştirme kapalı
+- Üstteki rozet kimin bağlı olduğunu ve gidiş-dönüş süresini gösterir
+
+Dünya iki tarafta da aynı tohumla kurulduğu için ağaç, ev, kaya ve ganimet
+aynı yerde duruyor; ağdan yalnız oyuncunun durumu (saniyede on iki paket) ve
+birkaç olay geçiyor: ganimet alma, taş atma, süpürgeye binme, konuşma ve günün
+saati. Çanta ve para herkesin kendine ait. Çakallar, Edibe ve Sadık iki tarafta
+ayrı ayrı işliyor — kovalamaca kişisel.
+
+Sınır: aradaki bağlantı doğrudan kurulduğu için bazı kısıtlı ağlarda (kurumsal
+güvenlik duvarı, bazı mobil operatörler) eşleşme kurulamayabilir; böyle bir
+durumda oyun tek kişilik moda düşer.
+
 ## Görsel katman
 
 Sahne duruyordu: otlar kıpırdamıyor, gökyüzü boş, zemin tek bir aydınlıktaydı.
