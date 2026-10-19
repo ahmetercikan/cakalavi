@@ -1164,7 +1164,7 @@ const SND = {
 const NET = {
   on:false, room:null, peerId:null, host:false, code:'',
   sendState:null, sendEv:null, last:0, rxT:0, ping:0,
-  rx:null, prev:null, lerpT:0, mateFly:false,
+  rx:null, prev:null, lerpT:0, mateFly:false, hadPeer:false,
 };
 
 /* ---------------- sahne ---------------- */
@@ -7552,8 +7552,10 @@ function netBadge(){
   if(!NET.on){ el.hidden = true; return; }
   el.hidden = false;
   el.classList.toggle('off', !NET.peerId);
+  /* henüz kimse katılmadıysa "koptu" demek yanıltıcı olur */
   document.getElementById('net-who').textContent =
-    NET.peerId ? (GS.who === 'ali' ? 'Alya bağlı' : 'Ali bağlı') : 'bağlantı koptu';
+    NET.peerId ? (GS.who === 'ali' ? 'Alya bağlı' : 'Ali bağlı')
+               : (NET.hadPeer ? 'bağlantı koptu' : 'arkadaş bekleniyor · ' + NET.code);
   document.getElementById('net-ping').textContent = NET.peerId ? NET.ping + ' ms' : '';
 }
 async function netStart(code, asHost){
@@ -7595,7 +7597,7 @@ async function netStart(code, asHost){
     try{ NET.ping = Math.round(await NET.room.ping(NET.peerId)); }catch(e){}
   }, 3000);
   room.onPeerJoin = id => {
-    NET.peerId = id;
+    NET.peerId = id; NET.hadPeer = true;
     if(NET.host) NET.sendEv({ k:'role', who:GS.who, time:GS.night ? 'night' : timeKey });
     netReady();
   };
@@ -8157,7 +8159,7 @@ window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS,
    önbelleğe hiç uğramadan soruyor; kendi numarasıyla uyuşmuyorsa bütün
    önbellekleri ve servis çalışanlarını silip bir kez yeniden yükleniyor.
    Döngüye girmesin diye tek seferlik bir işaret bırakıyor.               */
-const BUILD = '19.10.2026 18:52';
+const BUILD = '19.10.2026 18:54';
 /* Başlık ekranındaki damga elle yazılıyordu ve geride kalabiliyordu;
    artık yapı numarasının kendisinden yazılıyor.                          */
 { const el = document.getElementById('build'); if(el) el.textContent = 'sürüm ' + BUILD; }
