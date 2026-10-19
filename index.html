@@ -3034,6 +3034,178 @@ const MINI_SC = 1.52;
    ölçek kanalını yalnız kullanmadığımız "static" klibinde oynattığı
    için bu değerler kalıcı.                                            */
 const MINI_LEG = 2.15, MINI_TORSO = 1.42, MINI_ARM = 1.3;
+
+/* ---- karakter ayrıntıları -----------------------------------------------
+   Paket gövdeleri birkaç düz renk bloktan ibaret: uzaktan hem yüz hem
+   silüet düz kalıyor. Pakete dokunmadan, kemiklere takılan küçük
+   parçalarla ayrıntı ekleniyor -- kasket, at kuyruğu, kaş, kulak, burun,
+   yaka, kemer, ayakkabı ve omuz çantası.
+
+   Parçalar dünya ölçüsünde (metre) yazılıp kemiğin kendi ölçeği geri
+   alınıyor; yoksa bacak kemiğindeki 2,15 kat uzatma ayakkabıyı da
+   uzatırdı. Kemiğin yerel eksenleri: +Y yukarı, +Z yüzün baktığı yön.  */
+function boneSlot(bn){
+  const g = new THREE.Group();
+  bn.add(g);
+  bn.updateWorldMatrix(true, false);
+  const s = new THREE.Vector3();
+  bn.matrixWorld.decompose(new THREE.Vector3(), new THREE.Quaternion(), s);
+  g.scale.set(1/s.x, 1/s.y, 1/s.z);
+  return g;
+}
+function dbox(w, h, d, mat, x, y, z){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(x, y, z);
+  m.castShadow = m.receiveShadow = true;
+  return m;
+}
+/* Eklenen parçaların rengi paketin kendi atlasından okunuyor; ten, saç
+   ve kıyafet renkleri gövdeyle birebir tutsun diye. Atlas bir renk
+   paleti olduğu için bir bölgedeki en sık piksel o bölgenin rengidir. */
+const _atlasPx = new Map();
+function atlasPixels(tex){
+  const img = tex && tex.image;
+  if(!img || !img.width) return null;
+  let d = _atlasPx.get(img);
+  if(d === undefined){
+    try{
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      const x = c.getContext('2d', { willReadFrequently:true });
+      x.drawImage(img, 0, 0);
+      d = x.getImageData(0, 0, c.width, c.height);
+    }catch(e){ d = null; }
+    _atlasPx.set(img, d);
+  }
+  return d;
+}
+function atlasTone(mesh, lo, hi, fallback){
+  const tex = mesh && mesh.material && mesh.material.map;
+  const d = atlasPixels(tex);
+  const geo = mesh && mesh.geometry;
+  if(!d || !geo || !geo.attributes.uv) return new THREE.Color(fallback);
+  geo.computeBoundingBox();
+  const bb = geo.boundingBox, h = bb.max.y - bb.min.y;
+  const y0 = bb.min.y + h*lo, y1 = bb.min.y + h*hi;
+  const pos = geo.attributes.position, uv = geo.attributes.uv;
+  const cnt = new Map();
+  for(let i = 0; i < pos.count; i++){
+    const y = pos.getY(i);
+    if(y < y0 || y > y1) continue;
+    const u = uv.getX(i), v = tex.flipY ? 1 - uv.getY(i) : uv.getY(i);
+    const px = Math.min(d.width - 1, Math.max(0, Math.round(u*d.width)));
+    const py = Math.min(d.height - 1, Math.max(0, Math.round(v*d.height)));
+    const o = (py*d.width + px)*4;
+    const key = (d.data[o] << 16) | (d.data[o+1] << 8) | d.data[o+2];
+    cnt.set(key, (cnt.get(key) || 0) + 1);
+  }
+  let best = -1, bn = 0;
+  for(const [k, n] of cnt) if(n > bn){ bn = n; best = k; }
+  if(best < 0) return new THREE.Color(fallback);
+  return new THREE.Color().setRGB(((best >> 16) & 255)/255, ((best >> 8) & 255)/255,
+                                  (best & 255)/255, THREE.SRGBColorSpace);
+}
+const shade = (c, k) => c.clone().multiplyScalar(k);
+
+/* Ölçüler karakterin kendi iskeletinden alındı (ayak hizası sıfır):
+   baş kemiği 0,94 m -- baş bloğu 0,42 m boyunda, 0,58 m eninde;
+   gövde kemiği 0,58 m -- gövde 0,36 m boyunda, 0,46 m eninde;
+   bacak kemikleri 0,58 m, ayak tabanı kemiğin 0,576 m altında.        */
+function dressMini(root, B, cfg, who){
+  let headMesh = null, bodyMesh = null;
+  root.traverse(o => {
+    if(o.name === 'head-mesh') headMesh = o;
+    else if(o.name === 'body-mesh') bodyMesh = o;
+  });
+  /* Ten ve saç modelin kendi atlasından okunuyor -- burun, kulak, kaş ve
+     at kuyruğu gövdeyle birebir tutsun diye. Kıyafet rengi okunmuyor:
+     gövde kemiğine kol ve boyun pikselleri de düşüyor, örnek şaşıyor.
+     Giysi ayrıntıları zaten kontrast versin diye krem tonunda.         */
+  const skin  = atlasTone(headMesh, 0.00, 0.28, cfg.skin);
+  const hairC = atlasTone(headMesh, 0.78, 1.00, cfg.hair);
+  const M = {
+    skin:mkMat(skin), hair:mkMat(hairC),
+    yaka:mkMat(cfg.trim || 0xf6ecd9), kemer:mkMat(0x56402c), toka:mkMat(0xd8b05a),
+    taban:mkMat(cfg.sole || 0xdcd7c9), bant:mkMat(cfg.lace || 0xcfc6b4),
+    canta:mkMat(cfg.pack || 0x3f6b52), cantaD:mkMat(cfg.packD || 0x2d5240),
+    aksan:mkMat(who === 'ali' ? (cfg.cap || 0xf4705a) : (cfg.band || 0xefb455)),
+  };
+  M.kasketD = mkMat(shade(new THREE.Color(cfg.cap || 0xf4705a), 0.52));
+
+  /* --- baş --- */
+  const hs = boneSlot(B['head'] || root);
+  /* Kaş denendi ve vazgeçildi: gözler atlasa çizili ve iki karakterde
+     farklı yükseklikte -- Ali'de güneş gözlüğü, Alya'da gözünü kapatan
+     bir çubuk gibi duruyordu. Yüz ayrıntısı burun ve kulakla sınırlı.  */
+  hs.add(dbox(0.072, 0.052, 0.034, M.skin, 0, 0.206, 0.214));   /* burun: 1,2 cm çıkıntı */
+  hs.add(dbox(0.034, 0.086, 0.086, M.skin,  0.296, 0.202, -0.012));
+  hs.add(dbox(0.034, 0.086, 0.086, M.skin, -0.296, 0.202, -0.012));
+
+  let tail = null;
+  if(who === 'ali'){
+    /* kasket: kubbe kafayı sarıyor, siperlik silüete kırık veriyor.
+       Köşeli kutu şapka gibi durmasın diye tepe yarım küre.            */
+    const kub = new THREE.Mesh(new THREE.SphereGeometry(0.306, 18, 10, 0, 6.283, 0, 1.57), M.aksan);
+    kub.scale.set(1, 0.56, 0.82); kub.position.set(0, 0.330, -0.016);
+    kub.castShadow = kub.receiveShadow = true; hs.add(kub);
+    const ban = new THREE.Mesh(new THREE.CylinderGeometry(0.310, 0.312, 0.034, 18), M.kasketD);
+    ban.scale.z = 0.82; ban.position.set(0, 0.338, -0.016);
+    ban.castShadow = true; hs.add(ban);
+    /* siperlik: yarım disk, düz kenarı arkada */
+    /* siperlik kubbenin içinde kalmasın: kubbenin derinliği 0,25 m */
+    const sip = new THREE.Mesh(new THREE.CylinderGeometry(0.336, 0.336, 0.026, 18, 1, false, -1.5708, 3.1416), M.aksan);
+    sip.position.set(0, 0.328, 0.034); sip.scale.set(0.86, 1, 1);
+    sip.rotation.set(-0.10, 0, 0); sip.castShadow = true; hs.add(sip);
+    const dug = new THREE.Mesh(new THREE.SphereGeometry(0.028, 10, 8), M.kasketD);
+    dug.position.set(0, 0.500, -0.016); hs.add(dug);
+  }else{
+    /* saç bandı ve at kuyruğu: en güçlü silüet farkı */
+    hs.add(dbox(0.596, 0.046, 0.478, M.aksan, 0, 0.356, -0.008));
+    tail = new THREE.Group();
+    tail.position.set(0, 0.272, -0.238);
+    tail.rotation.x = 0.62;
+    hs.add(tail);
+    tail.add(dbox(0.118, 0.072, 0.118, M.aksan, 0, -0.028, 0));
+    /* sekiz dilim: gövdenin köşeli diliyle uyumlu, pürüzsüz koni gibi
+       sarkmasın diye kısa ve dolgun                                    */
+    const kuy = lathe([[0.016, -0.262], [0.056, -0.224], [0.094, -0.138],
+                       [0.100, -0.068], [0.088, -0.014], [0.015, 0.0]], M.hair, 8);
+    kuy.castShadow = true; tail.add(kuy);
+  }
+
+  /* --- gövde: yaka, kemer, omuz çantası --- */
+  const ts = boneSlot(B['torso'] || root);
+  ts.add(dbox(0.316, 0.044, 0.344, M.yaka, 0, 0.330, -0.022));
+  ts.add(dbox(0.440, 0.032, 0.348, M.kemer, 0, -0.058, -0.040));
+  ts.add(dbox(0.064, 0.044, 0.026, M.toka,  0, -0.058, 0.150));
+
+  const canta = new THREE.Group(); ts.add(canta);
+  const askı = dbox(0.072, 0.54, 0.046, M.cantaD, -0.012, 0.128, 0.152);
+  askı.rotation.z = -0.80; canta.add(askı);
+  const omuz = dbox(0.084, 0.052, 0.30, M.cantaD, 0.176, 0.318, 0.026);
+  canta.add(omuz);
+  /* Kese kalçanın yanına konulunca aşağı sarkan kolun arkasında
+     kalıyordu; oyun kamerası da çoğu zaman arkadan baktığı için çanta
+     bel hizasında, sırtın sağ tarafında duruyor.                       */
+  const kese = new THREE.Group(); kese.position.set(-0.132, -0.092, -0.300);
+  kese.rotation.y = -0.22; canta.add(kese);
+  kese.add(dbox(0.272, 0.216, 0.138, M.canta,  0, 0, 0));
+  kese.add(dbox(0.282, 0.068, 0.150, M.cantaD, 0, 0.122, 0));
+  kese.add(dbox(0.062, 0.052, 0.026, M.toka,   0, 0.062, 0.078));
+
+  /* --- ayakkabılar --- */
+  for(const k of ['leg-left', 'leg-right']){
+    if(!B[k]) continue;
+    const ls = boneSlot(B[k]);
+    /* Modelin kendi ayağı 0,20 m eninde; kutular bundan dar kalırsa
+       içinde kaybolur. Taban ve bant biraz taşacak kadar geniş.       */
+    ls.add(dbox(0.224, 0.034, 0.366, M.taban, 0, -0.5590, -0.014));
+    ls.add(dbox(0.226, 0.028, 0.112, M.bant,  0, -0.5010, 0.116));
+    ls.add(dbox(0.226, 0.026, 0.108, M.bant,  0, -0.4640, -0.070));
+  }
+  return { canta, tail };
+}
+
 function makeMini(gltf, cfg){
   const G = new THREE.Group();
   /* yüzme eğimi ve sendeleme için ara grup; model kendi içinde döndürülüyor
@@ -3082,9 +3254,11 @@ function makeMini(gltf, cfg){
   hand.position.set(0, -0.17, 0.02);
   hand.scale.set(0.62/MINI_SC, 0.62/(MINI_SC*MINI_ARM), 0.62/MINI_SC);
   (B['arm-right'] || root).add(hand);
-  /* sırt çantası */
+  /* File çanta yükseltmesinin sırt çantası. Kemiğin yerel +Z'si yüzün
+     baktığı yön; eksi değer verilmediği için çanta sırtta değil göğüste
+     duruyordu.                                                         */
   const pack = new THREE.Group();
-  pack.position.set(0, 0.12, 0.17); pack.scale.set(1/MINI_SC, 1/(MINI_SC*MINI_TORSO), 1/MINI_SC);
+  pack.position.set(0, 0.12, -0.24); pack.scale.set(1/MINI_SC, 1/(MINI_SC*MINI_TORSO), 1/MINI_SC);
   (B['torso'] || root).add(pack);
   const packM = mkMat(cfg.pack || 0x3f6b52), packD = mkMat(cfg.packD || 0x2f5240);
   const sack = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), packM);
@@ -3093,6 +3267,8 @@ function makeMini(gltf, cfg){
   flap.scale.set(0.118, 0.1, 0.074); flap.position.y = 0.06; pack.add(flap);
   pack.visible = false;
 
+  const detay = dressMini(root, B, cfg, cfg.who);
+
   const mixer = new THREE.AnimationMixer(root);
   const act = {};
   for(const c of gltf.animations) act[c.name] = mixer.clipAction(c);
@@ -3100,8 +3276,8 @@ function makeMini(gltf, cfg){
     if(act[k]){ act[k].setLoop(THREE.LoopOnce); act[k].clampWhenFinished = true; }
   }
   if(act.idle) act.idle.play();
-  G.userData = { mini:{ mixer, act, cur:'idle', airT:0, body },
-                 pack, armR:{ hand }, head:B['head'] || root,
+  G.userData = { mini:{ mixer, act, cur:'idle', airT:0, body, tail:detay.tail, tt:0 },
+                 pack, canta:detay.canta, armR:{ hand }, head:B['head'] || root,
                  spd:0, throwT:0, pickT:0, cfg };
   return G;
 }
@@ -3174,6 +3350,14 @@ function animMini(k, st, dt){
   b.position.y = lp(b.position.y, M.baseY + (st.swim ? 0.26 : 0), dt*6);
   /* sendeleme */
   b.rotation.z = lp(b.rotation.z, st.stun > 0 ? Math.sin(st.stun*22)*0.2 : 0, dt*10);
+  /* at kuyruğu: adım temposuna bağlı salınım, havada biraz savruluyor */
+  if(M.tail){
+    M.tt += dt*(3.4 + u.spd*9);
+    const amp = 0.055 + u.spd*0.115;
+    M.tail.rotation.x = lp(M.tail.rotation.x,
+      0.62 - u.spd*0.16 + Math.sin(M.tt)*amp + (st.air ? 0.22 : 0), dt*12);
+    M.tail.rotation.z = lp(M.tail.rotation.z, Math.sin(M.tt*0.62)*amp*0.75, dt*10);
+  }
 }
 
 function makeKid(cfg){
@@ -3517,10 +3701,10 @@ function animKid(k, s, dt){
 
 const ALI_CFG  = { skin:0xe3ab80, shirt:0x3f86b4, sleeve:0x356f96, short:0x27455a, hair:0x2a1f16,
                    shoe:0xf2efe6, sole:0xdcd7c9, strap:0x3f86b4, lace:0xcfc6b4, cap:0xf4705a, trim:0xf6ecd9,
-                   pack:0x3f6b52, packD:0x2d5240, scale:1.0 };
+                   pack:0x3f6b52, packD:0x2d5240, scale:1.0, who:'ali' };
 const ALYA_CFG = { skin:0xf0c49c, shirt:0xf4705a, sleeve:0xe06552, short:0x3ad0c4, hair:0x4a2f1e,
                    shoe:0xfbf5e8, sole:0xe6ddc9, strap:0xf4705a, lace:0xe9c47f, band:0xefb455, trim:0xffe3b0,
-                   pack:0xe0785f, packD:0xb95844, scale:0.965 };
+                   pack:0xe0785f, packD:0xb95844, scale:0.965, who:'alya' };
 /* model yüklendiyse hazır karakter, yüklenemediyse eski elle çizilmiş gövde */
 const KIDS = {
   ali:  PROP.kid.kidA ? makeMini(PROP.kid.kidA, ALI_CFG)  : makeKid(ALI_CFG),
@@ -4016,8 +4200,10 @@ const hex = c => '#' + c.toString(16).padStart(6, '0');
 /* elle çizilmiş portreler — madalyon ve karakter seçimi için */
 function portrait(who){
   const A = who === 'ali';
-  const skin = A ? '#e8b48a' : '#f0c49c', hair = A ? '#2d2218' : '#4a2f1e';
-  const shirt = A ? '#3f86b4' : '#f4705a', cap = '#f4705a', band = '#efb455';
+  /* Renkler 3B modellerin kendi doku atlasından okundu; madalyondaki
+     çocukla sahadaki çocuk aynı görünsün diye.                         */
+  const skin = A ? '#a55d41' : '#e9b28c', hair = A ? '#43434c' : '#e78f65';
+  const shirt = A ? '#3aa378' : '#ffd061', cap = '#f4705a', band = '#efb455';
   return `<svg viewBox="0 0 64 64">
     <circle cx="32" cy="32" r="32" fill="#092734"/>
     <path d="M6 64c2-13 12-19 26-19s24 6 26 19z" fill="${shirt}"/>
@@ -5319,7 +5505,13 @@ function updatePlayer(dt, t){
   kid.rotation.y = P.face;
   animKid(kid, { spd:P.spd, swim:P.swim, dive:P.dive, air:!P.onGround && !P.swim,
                  stun:GS.stun, torch:GS.tool === 'fener' && GS.gear.fener }, dt);
-  KIDS[GS.who].userData.pack.visible = GS.gear.file;
+  /* Çanta yalnız aktif karaktere ve yalnız File çanta alınınca
+     takılıyordu; oyuncu çoğu zaman çantasız dolaşıyordu. Omuz çantası
+     baştan duruyor, File çanta yükseltmesi sırt çantasını ekliyor.     */
+  for(const kk in KIDS){
+    const ud = KIDS[kk].userData;
+    if(ud.pack) ud.pack.visible = GS.gear.file;
+  }
 
   /* arkadaş takip */
   const want = 3.0;
@@ -5339,7 +5531,6 @@ function updatePlayer(dt, t){
   other.position.set(MATE.x, MATE.y, MATE.z);
   other.rotation.y = MATE.face;
   animKid(other, { spd:MATE.spd, swim:MATE.swim, dive:false, air:false, stun:0, torch:false }, dt);
-  other.userData.pack.visible = false;
 
   MATE.say -= dt;
   if(MATE.say <= 0 && rand() < 0.004){
@@ -5978,7 +6169,7 @@ window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS,
    önbelleğe hiç uğramadan soruyor; kendi numarasıyla uyuşmuyorsa bütün
    önbellekleri ve servis çalışanlarını silip bir kez yeniden yükleniyor.
    Döngüye girmesin diye tek seferlik bir işaret bırakıyor.               */
-const BUILD = '19.10.2026 14:06';
+const BUILD = '19.10.2026 14:40';
 /* Başlık ekranındaki damga elle yazılıyordu ve geride kalabiliyordu;
    artık yapı numarasının kendisinden yazılıyor.                          */
 { const el = document.getElementById('build'); if(el) el.textContent = 'sürüm ' + BUILD; }

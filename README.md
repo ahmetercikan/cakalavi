@@ -53,6 +53,18 @@ gelen hazır karakterler. Otuz iki animasyon klibi paketle birlikte geliyor;
 oyun durma, yürüme, koşma, zıplama, düşme, eşya alma ve elde tutma
 kliplerini kullanıyor. Karakter başına 723-876 üçgen.
 
+Paket gövdeleri birkaç düz renk bloktan ibaret olduğu için üstlerine oyunun
+kendi ayrıntıları ekleniyor: Ali'ye kasket, Alya'ya saç bandı ve adım
+temposuyla sallanan at kuyruğu, ikisine burun, kulak, yaka, kemer, ayakkabı
+tabanı ve omuz çantası. Parçalar kemiklere takılıyor, kemiğin kendi ölçeği
+geri alınarak dünya ölçüsünde yazılıyor; ten ve saç renkleri modelin kendi
+doku atlasından okunuyor ki eklenen parçalar gövdeyle birebir tutsun.
+HUD madalyonundaki portreler de aynı renklerle çiziliyor. Ayrıntıların
+tamamı karakter başına 1.838 üçgen; ölçülen kare hızı farkı sıfır.
+
+Çanta baştan görünüyor; "File çanta" yükseltmesi alınınca sırt çantası da
+ekleniyor.
+
 `assets/` altındaki kaya, çakıl, çalı ve ağaç modelleri Quaternius'un **Stylized Nature
 MegaKit** paketinden (CC0, https://quaternius.com) alınmıştır. Dokuları
 çıkarılmış, yerine oyunun kendi düz toon renkleri uygulanmıştır; toplam ~1 MB.
