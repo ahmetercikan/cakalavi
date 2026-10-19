@@ -482,7 +482,7 @@ button:focus-visible,[role="button"]:focus-visible{outline:2px solid var(--teal)
 }
 
 /* ---- dokunmatik: telefon ve tablet, dikey ve yatay ---- */
-#touch{display:none; position:fixed; inset:0; z-index:19; pointer-events:none}
+#touch{--joy:128px; display:none; position:fixed; inset:0; z-index:19; pointer-events:none}
 body.touch #touch{display:block}
 body.touch #radar,body.touch #journal,body.touch .belt{display:none}
 /* araç rayı telefonda iki sütuna sarar, kimlik kartının altına inmez */
@@ -499,31 +499,32 @@ body.touch #modal-body{padding-bottom:28px}
 body.touch .btn{padding:11px 16px; font-size:13px}
 body.touch .srow{padding:12px 11px}
 body.touch #modal-close{width:40px; height:40px}
-#movezone{position:absolute; left:0; right:52%; top:22%; bottom:0; pointer-events:auto; touch-action:none}
-#lookzone{position:absolute; left:48%; right:0; top:16%; bottom:0; pointer-events:auto; touch-action:none}
+/* bakış alanı bütün ekranı kaplar: sürükleyince kamera döner, bir kez
+   dokununca karakter zıplar. Yön çubuğu sol altta sabit durur.            */
+#lookzone{position:absolute; inset:0; pointer-events:auto; touch-action:none}
+#movezone{
+  position:absolute; z-index:2; touch-action:none; pointer-events:auto;
+  left:max(2px, env(safe-area-inset-left,0px));
+  bottom:calc(2px + env(safe-area-inset-bottom,0px));
+  width:calc(var(--joy) + 72px); height:calc(var(--joy) + 72px);
+}
 #joy{
-  position:absolute; width:124px; height:124px; margin:-62px 0 0 -62px; border-radius:50%;
-  pointer-events:none; opacity:0; transition:opacity .16s;
-  background:radial-gradient(circle at 50% 50%, rgba(8,32,44,.46), rgba(8,32,44,.2));
-  border:1px solid rgba(246,236,217,.22); box-shadow:inset 0 0 26px rgba(2,12,18,.5);
+  position:absolute; left:50%; top:50%; width:var(--joy); height:var(--joy);
+  margin:calc(var(--joy)/-2) 0 0 calc(var(--joy)/-2); border-radius:50%;
+  pointer-events:none; opacity:.62; transition:opacity .16s;
+  background:radial-gradient(circle at 50% 50%, rgba(8,32,44,.5), rgba(8,32,44,.22));
+  border:1px solid rgba(246,236,217,.24); box-shadow:inset 0 0 26px rgba(2,12,18,.5);
 }
 #joy.on{opacity:1}
-#joy::after{content:""; position:absolute; inset:16px; border-radius:50%; border:1px dashed rgba(246,236,217,.14)}
+#joy::after{content:""; position:absolute; inset:14px; border-radius:50%; border:1px dashed rgba(246,236,217,.16)}
 #joy-k{
-  position:absolute; left:50%; top:50%; width:54px; height:54px; border-radius:50%;
+  position:absolute; left:50%; top:50%; width:calc(var(--joy)*0.44); height:calc(var(--joy)*0.44);
+  border-radius:50%; transition:transform .09s ease-out;
   background:radial-gradient(circle at 42% 34%, rgba(94,236,226,.95), rgba(32,150,146,.88));
   border:1px solid rgba(246,236,217,.55); transform:translate(-50%,-50%);
   box-shadow:0 6px 18px -4px rgba(0,0,0,.75);
 }
-#joy-hint{
-  position:absolute; left:calc(28px + env(safe-area-inset-left,0px));
-  bottom:calc(30px + env(safe-area-inset-bottom,0px));
-  width:96px; height:96px; border-radius:50%; pointer-events:none;
-  border:1px dashed rgba(246,236,217,.16); display:grid; place-items:center;
-  font-family:var(--mono); font-size:9px; letter-spacing:.14em; color:rgba(246,236,217,.3);
-  transition:opacity .25s;
-}
-#joy-hint.hide{opacity:0}
+#joy.on #joy-k{transition:none}
 
 #tbtns{
   position:fixed; z-index:23; right:calc(14px + env(safe-area-inset-right,0px));
@@ -567,10 +568,11 @@ body.touch #tbtns{display:grid}
   body.touch #vitals{bottom:calc(206px + env(safe-area-inset-bottom,0px))}
   body.touch #prompt{bottom:calc(264px + env(safe-area-inset-bottom,0px))}
   body.touch #tbtns{--tb:64px}
-  body.touch #lookzone{top:22%}
+  body.touch #touch{--joy:118px}
 }
 /* yatay telefon: her şey kenarlara yapışır */
 @media (orientation:landscape) and (max-height:520px){
+  body.touch #touch{--joy:112px}
   body.touch #compass{width:min(420px,52vw); height:30px}
   body.touch #objective{top:calc(42px + env(safe-area-inset-top,0px)); font-size:11px}
   body.touch #vitals{bottom:calc(10px + env(safe-area-inset-bottom,0px)); left:auto; right:calc(240px + env(safe-area-inset-right,0px)); transform:none}
@@ -588,7 +590,7 @@ body.touch #tbtns{display:grid}
 @media (min-width:820px) and (pointer:coarse){
   body.touch #tbtns{--tb:70px}
   body.touch #radar{display:block; width:150px; height:150px; bottom:calc(16px + env(safe-area-inset-bottom,0px)); right:calc(250px + env(safe-area-inset-right,0px))}
-  body.touch #joy-hint{width:110px; height:110px}
+  body.touch #touch{--joy:164px}
 }
 
 /* ---- açılış ve başlık ---- */
@@ -855,10 +857,8 @@ body.touch #tbtns{display:grid}
 </div>
 
 <div id="touch">
-  <div id="movezone"></div>
   <div id="lookzone"></div>
-  <div id="joy-hint">YÜRÜ</div>
-  <div id="joy"><div id="joy-k"></div></div>
+  <div id="movezone"><div id="joy"><div id="joy-k"></div></div></div>
 </div>
 <div id="tbtns">
   <button id="tb-dive"><svg class="ico"><use href="#i-dive"/></svg><span class="n">Dal</span></button>
@@ -878,10 +878,11 @@ body.touch #tbtns{display:grid}
     <div class="picks" id="picks"></div>
     <button class="btn go" id="start">Başla</button>
     <p class="legend">
-      <span><kbd>Sol yarı</kbd><b>yürü (parmağını kaydır)</b></span>
-      <span><kbd>Sağ yarı</kbd><b>bak · tek dokunuş taş atar</b></span>
+      <span><kbd>Sol alt</kbd><b>yön çubuğu — ittikçe koşar</b></span>
+      <span><kbd>Ekrana dokun</kbd><b>zıpla</b></span>
+      <span><kbd>Ekranı sürükle</kbd><b>etrafına bak</b></span>
       <span><kbd>İki parmak</kbd><b>yakınlaş</b></span>
-      <span><kbd>Sağ alt</kbd><b>dal · zıpla · fener · çanta</b></span>
+      <span><kbd>Sağ alt</kbd><b>dal · taş · fener · çanta</b></span>
       <span><kbd>Büyük tuş</kbd><b>etkileşim</b></span>
     </p>
   </div>
@@ -3807,11 +3808,12 @@ function helpHTML(){
   const key = (k, t) => `<div class="srow">${ic('hand')}<span class="tx"><b>${k}</b><small>${t}</small></span></div>`;
   return `<p class="note">Üçüncü şahıs oynanır: Ali ya da Alya’yı yürütürsün, diğeri peşinden gelir.</p>
     <div class="sect"><h4>Kontroller</h4><div class="ln"></div></div>
-    ${key('Sol yarı', 'parmağını bastığın yerde yön çubuğu çıkar — kenara dayanırsan koşarsın')}
-    ${key('Sağ yarı', 'kamerayı çevirir · tek dokunuş taş atar · iki parmak yakınlaştırır')}
+    ${key('Sol alttaki yön çubuğu', 'başparmağını üstüne koy, istediğin yöne it — kenara dayanırsan koşarsın')}
+    ${key('Ekrana bir kez dokun', 'zıpla')}
+    ${key('Ekranı sürükle', 'etrafına bak · iki parmak yakınlaştırır')}
     ${key('Etkileş — büyük tuş', 'büfe, hurdacı, pano, arkadaşla konuş, kıyıdan çakıl topla')}
     ${key('Dal · Zıpla', 'suda dal (nefes halkası dolana kadar) · zıpla')}
-    ${key('Fener · Taş', 'el fenerini aç-kapa · elindeki taşı at')}
+    ${key('Taş · Fener', 'elindeki taşı at · el fenerini aç-kapa')}
     ${key('Çanta · Değiş', 'ganimet çantası · Ali ↔ Alya')}
     <div class="sect" style="margin-top:14px"><h4>Ganimet</h4><div class="ln"></div></div>
     <div class="grid">${Object.keys(ITEMS).map(k =>
@@ -4254,43 +4256,53 @@ $('panel-min').addEventListener('click', () => {
 });
 $('avatar').addEventListener('click', () => switchKid());
 
-/* ---------- dokunmatik: yüzen yön çubuğu + bakış alanı + eylem tuşları ----------
-   Sol yarıya parmak basınca yön çubuğu parmağın altında beliriyor, sağ yarı
-   kamerayı döndürüyor; iki parmakla yakınlaşma var. Tuşlar titreşimli.        */
+/* ---------- dokunmatik: sol altta sabit yön çubuğu + ekrana dokunarak zıplama ----
+   Yön çubuğu sol alt köşede sabit duruyor: başparmağını üstüne koyup
+   istediğin yöne itiyorsun, kenara dayanınca koşuyor. Ekranın geri kalanı
+   sürüklenince kamerayı döndürüyor, bir kez dokununca karakter zıplıyor;
+   iki parmakla yakınlaşma var. Tuşlar titreşimli.                            */
 const buzz = ms => { try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e){} };
 (() => {
-  const joy = $('joy'), knob = $('joy-k'), hint = $('joy-hint');
+  const joy = $('joy'), knob = $('joy-k');
   const moveZone = $('movezone'), lookZone = $('lookzone');
-  const R = 52;
+  let R = 58, cx = 0, cy = 0;
+  /* çubuğun yarıçapı ve merkezi ekran boyutuna göre değişiyor */
+  function joyBox(){
+    const r = joy.getBoundingClientRect();
+    cx = r.left + r.width/2; cy = r.top + r.height/2;
+    R = r.width*0.42;
+  }
 
-  /* --- yürüme --- */
-  let mId = null, mx0 = 0, my0 = 0;
+  /* --- yürüme: merkez sabit, topuz parmağı takip eder --- */
+  let mId = null;
+  function joyTo(x, y){
+    const dx = x - cx, dy = y - cy;
+    const L = Math.hypot(dx, dy) || 1, cl = Math.min(L, R);
+    knob.style.transform = `translate(calc(-50% + ${dx/L*cl}px), calc(-50% + ${dy/L*cl}px))`;
+    IN.mx = dx/L*(cl/R); IN.mz = -dy/L*(cl/R);
+    IN.run = L > R*0.82;
+  }
   moveZone.addEventListener('pointerdown', e => {
     if(mId !== null || !UI.modal.hidden || !started) return;
     mId = e.pointerId;
     try{ moveZone.setPointerCapture(mId); }catch(err){}
-    mx0 = e.clientX; my0 = e.clientY;
-    joy.style.left = mx0 + 'px'; joy.style.top = my0 + 'px';
-    joy.classList.add('on'); hint.classList.add('hide');
-    knob.style.transform = 'translate(-50%,-50%)';
+    joyBox(); joy.classList.add('on'); joyTo(e.clientX, e.clientY);
     e.preventDefault();
   });
   moveZone.addEventListener('pointermove', e => {
     if(e.pointerId !== mId) return;
-    const dx = e.clientX - mx0, dy = e.clientY - my0;
-    const L = Math.hypot(dx, dy) || 1, cl = Math.min(L, R);
-    knob.style.transform = `translate(calc(-50% + ${dx/L*cl}px), calc(-50% + ${dy/L*cl}px))`;
-    IN.mx = dx/L*(cl/R); IN.mz = -dy/L*(cl/R);
-    IN.run = L > R*0.84;
+    joyTo(e.clientX, e.clientY);
     e.preventDefault();
   });
   const endMove = e => {
     if(e.pointerId !== mId) return;
     mId = null; IN.mx = IN.mz = 0; IN.run = false;
+    knob.style.transform = 'translate(-50%,-50%)';
     joy.classList.remove('on');
   };
   moveZone.addEventListener('pointerup', endMove);
   moveZone.addEventListener('pointercancel', endMove);
+  addEventListener('resize', joyBox);
 
   /* --- bakış ve yakınlaşma --- */
   const look = new Map();
@@ -4328,12 +4340,18 @@ const buzz = ms => { try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e)
     const single = look.size === 1;
     look.delete(e.pointerId);
     if(!look.size) pinchD = 0;
-    if(single && tapMove < 12 && performance.now() - tapT < 300 && mode === 'play' && UI.modal.hidden){
-      throwStone(); buzz(8);
+    if(single && tapMove < 14 && performance.now() - tapT < 300 && mode === 'play' && UI.modal.hidden){
+      jump(); buzz(10);
     }
   };
   lookZone.addEventListener('pointerup', endLook);
   lookZone.addEventListener('pointercancel', endLook);
+
+  /* ekrana dokununca da, Zıpla tuşuna basınca da aynı hareket */
+  function jump(){
+    if(P.swim){ IN.jump = true; setTimeout(() => { IN.jump = false; }, 200); }
+    else if(P.onGround) P.vy = 5.4;
+  }
 
   /* --- eylem tuşları --- */
   const bind = (id, fn, up2) => {
@@ -4347,7 +4365,7 @@ const buzz = ms => { try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e)
   bind('tb-stone', () => throwStone());
   bind('tb-torch', () => toggleTorch());
   bind('tb-bag', () => (UI.modal.hidden ? openModal('bag') : closeModal()));
-  bind('tb-jump', () => { if(!P.swim && P.onGround) P.vy = 5.4; else IN.jump = true; }, () => { IN.jump = false; });
+  bind('tb-jump', () => jump(), () => { IN.jump = false; });
   bind('tb-dive', () => { IN.dive = true; }, () => { IN.dive = false; });
   bind('tb-swap', () => switchKid());
 })();

@@ -13,8 +13,9 @@ tam ekran bir uygulama gibi açılır ve çevrimdışı çalışır.
 
 Oyun yalnızca dokunmatik oynanır; arayüzde klavye tuşu geçmez.
 
-- **Sol yarı:** parmağını bas-kaydır, yön çubuğu parmağının altında belirir; kenara dayanınca koşar
-- **Sağ yarı:** sürükle → kamerayı çevir, tek dokunuş → taş at, iki parmak → yakınlaş
+- **Sol altta sabit yön çubuğu:** başparmağını üstüne koy, istediğin yöne it; kenara dayanınca koşar
+- **Ekrana bir kez dokun:** zıpla
+- **Ekranı sürükle:** kamerayı çevir; iki parmak → yakınlaş
 - **Sağ alt:** dal, zıpla, fener, taş, çanta, Ali↔Alya ve büyük etkileşim tuşu (yakında bir yer varsa yanar)
 - Dikey ve yatay yerleşim ayrı ayrı tasarlandı; çentik/ev düğmesi güvenli alanları gözetilir
 - Titreşimli geri bildirim, ekranı uyanık tutma, tam ekran düğmesi
