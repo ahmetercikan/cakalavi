@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+ <defs>
+  <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+   <stop offset="0" stop-color="#0d3b50"/><stop offset="0.58" stop-color="#072a3c"/><stop offset="1" stop-color="#04131d"/>
+  </linearGradient>
+  <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+   <stop offset="0.4" stop-color="#f6d08a" stop-opacity="0.52"/><stop offset="1" stop-color="#f6d08a" stop-opacity="0"/>
+  </radialGradient>
+  <linearGradient id="moon" x1="0" y1="0" x2="0.3" y2="1">
+   <stop offset="0" stop-color="#fff0c8"/><stop offset="1" stop-color="#f0bd6a"/>
+  </linearGradient>
+ </defs>
+ <rect width="512" height="512" fill="url(#sky)"/>
+ <g transform="translate(0 0) scale(1)">
+ <circle cx="336" cy="168" r="176" fill="url(#glow)"/>
+ <circle cx="336" cy="168" r="92" fill="url(#moon)"/>
+ <path fill="none" stroke="#3ad0c4" stroke-width="13" stroke-linecap="round" opacity="0.95"
+       d="M44 404 C110 384 160 424 226 404 S342 384 408 404 S468 410 468 410"/>
+ <path fill="none" stroke="#2fb3ad" stroke-width="11" stroke-linecap="round" opacity="0.8"
+       d="M74 446 C138 428 186 464 250 446 S362 428 438 446"/>
+ <path fill="none" stroke="#248e93" stroke-width="9" stroke-linecap="round" opacity="0.68"
+       d="M116 482 C172 466 214 498 270 482 S376 468 404 480"/>
+ <g transform="translate(0 -18)">
+  <path fill="#031019" d="M328 404 C346 352 340 306 331 270 L364 152 L306 228 L270 204 L234 112 L208 224 C190 240 174 255 158 268 L80 306 C67 312 67 328 82 332 L162 341 C188 365 226 389 262 400 Z"/>
+  <path fill="none" stroke="#5fd8cf" stroke-width="6" stroke-linecap="round" opacity="0.42" d="M333 274 L363 165"/>
+  <circle cx="268" cy="258" r="9" fill="#f6d08a" opacity="0.9"/>
+ </g></g>
+</svg>

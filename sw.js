@@ -5,9 +5,10 @@
    dakika boyunca eski sayfayı ağa hiç sormadan sunabiliyor. Bu yüzden HTML
    ve harita verisi {cache:'reload'} ile isteniyor — tarayıcı önbelleği
    atlanıyor, cevap bizim önbelleğimize yazılıyor.                          */
-const V = 'cakalavi-v16';
+const V = 'cakalavi-v17';
 const CORE = ['./', './index.html', './world.json', './manifest.webmanifest',
-              './icon-192.png', './icon-512.png'];
+              './logo.svg', './icon-192.png', './icon-512.png',
+              './icon-maskable-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(V)

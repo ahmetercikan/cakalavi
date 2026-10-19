@@ -8,8 +8,9 @@
 <meta name="apple-mobile-web-app-title" content="Çakal Avı">
 <meta name="description" content="Denizkent kıyısında ganimet topla, sat, gece çakal avına çık.">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icon-192.png">
-<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <title>Denizkent Yazı</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Outfit:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -559,7 +560,15 @@ body.touch #tbtns{display:grid}
 @media (orientation:portrait){
   body.touch #compass{width:min(380px,94vw); height:32px; top:calc(8px + env(safe-area-inset-top,0px))}
   body.touch #compass .needle{height:38px}
-  body.touch #objective{top:calc(46px + env(safe-area-inset-top,0px)); max-width:92vw}
+  /* Görev şeridi ortalanmıştı ve oyuncu kartıyla aynı hizadaydı: dar
+     telefonda ikisi üst üste biniyordu. Şerit kartın altına alındı ve
+     sağdaki araç çubuğundan önce bitiyor.                               */
+  body.touch #objective{
+    top:calc(126px + env(safe-area-inset-top,0px));
+    left:max(10px, env(safe-area-inset-left,0px));
+    right:calc(112px + env(safe-area-inset-right,0px));
+    transform:none; max-width:none; justify-content:center;
+  }
   body.touch #objective b{font-size:11.5px}
   body.touch #hud-tl{top:calc(46px + env(safe-area-inset-top,0px)); left:max(10px,env(safe-area-inset-left,0px))}
   body.touch #hud-tr{top:calc(46px + env(safe-area-inset-top,0px)); right:max(10px,env(safe-area-inset-right,0px))}
@@ -628,18 +637,53 @@ body.touch #tbtns{display:grid}
 .bar{width:min(280px,66vw); height:3px; background:rgba(246,236,217,.16); border-radius:3px; margin:26px auto 0; overflow:hidden}
 .bar i{display:block; height:100%; width:6%; background:linear-gradient(90deg,#ffd79a,var(--teal)); transition:width .4s ease}
 
-#title{position:fixed; inset:0; z-index:58; display:grid; place-items:center; padding:20px;
+/* Kart ortalanmış bir ızgaradaydı: telefonda içerik ekrandan uzun olunca
+   üstü kırpılıyor ve erişilemiyordu. Esnek kutu + margin:auto ile hem
+   ortalanıyor hem de taşarsa kaydırılabiliyor.                          */
+#title{position:fixed; inset:0; z-index:58; display:flex; align-items:center; justify-content:center;
+  overflow:auto; -webkit-overflow-scrolling:touch; padding:20px;
   background:radial-gradient(70% 60% at 50% 30%, rgba(6,38,54,.5), rgba(2,12,18,.86)); backdrop-filter:blur(7px);
   transition:opacity .5s ease}
 #title.gone{opacity:0; pointer-events:none}
 #title .box{
-  width:min(680px,100%); border-radius:22px; padding:26px 26px 22px; position:relative; overflow:hidden;
+  width:min(680px,100%); margin:auto; border-radius:22px; padding:26px 26px 22px; position:relative; overflow:hidden;
   background:linear-gradient(170deg, rgba(14,48,66,.95), rgba(4,18,27,.97));
   border:1px solid var(--hair); box-shadow:0 50px 100px -40px #000; text-align:center;
 }
 /* Süslemelik doku katmanı kartın tamamını örtüyordu ve konumlandırılmış
    olduğu için düğmelerin üstünde kalıp tıklamayı yutuyordu. */
 #title .box::before{content:""; position:absolute; inset:0; pointer-events:none; background-image:var(--grain); background-size:120px; opacity:.05; mix-blend-mode:overlay}
+#title .mark{display:block; width:76px; height:76px; margin:0 auto 14px; border-radius:20px;
+  box-shadow:0 10px 28px rgba(0,0,0,.45), 0 0 0 1px rgba(246,236,217,.08)}
+/* Dar ve alçak ekranlarda kart kısalıyor: iki karakter kartı yan yana
+   kalsın, logo ve yazılar küçülsün, kısa ekranda açıklama ve ipucu
+   listesi gizlensin.                                                    */
+@media (max-width:470px){
+  #title{padding:12px}
+  #title .box{padding:18px 15px 15px; border-radius:18px}
+  #title .mark{width:60px; height:60px; margin-bottom:10px; border-radius:16px}
+  #title .lede{font-size:12px; margin-bottom:14px; line-height:1.5}
+  .picks{gap:8px; margin-bottom:14px}
+  .pick{flex:1 1 0; width:auto; min-width:0; max-width:180px; padding:11px 8px 10px; border-radius:14px}
+  .pick .av{width:58px; height:58px; margin-bottom:6px}
+  .pick b{font-size:15px}
+  .pick small{font-size:10px; margin-top:2px}
+  .legend{font-size:9.5px}
+}
+@media (max-height:700px){
+  #title .mark{width:50px; height:50px; margin-bottom:7px}
+  #title h2{margin:5px 0 4px}
+  #title .lede{display:none}
+  #title .legend{display:none}
+  .picks{margin-bottom:12px}
+  .pick .av{width:52px; height:52px}
+}
+@media (max-height:520px){
+  #title{padding:12px}
+  #title .mark{display:none}
+  #title .box{padding:14px 14px 12px}
+  .pick small{display:none}
+}
 #title .eyebrow{font-family:var(--mono); font-size:10px; letter-spacing:.3em; text-transform:uppercase; color:var(--teal); margin:0}
 #title h2{font-family:var(--display); font-size:clamp(28px,5.4vw,42px); font-weight:700; margin:8px 0 6px; line-height:1}
 #title .lede{font-size:13px; color:var(--bone-2); margin:0 auto 20px; max-width:50ch; line-height:1.55}
@@ -879,6 +923,7 @@ body.touch #tbtns{display:grid}
 
 <div id="title" hidden>
   <div class="box">
+    <img class="mark" src="logo.svg" width="76" height="76" alt="" aria-hidden="true">
     <p class="eyebrow">Yalı · Şifne · Çeşme</p>
     <h2>Denizkent Yazı</h2>
     <p class="lede">Ali ve Alya bütün yazı koyda geçiriyor: kabuk, mineralli taş, bir de kimsenin istemediği delik otel terliği — hepsi ganimet. Akşam büfede satılır, gece el feneriyle çakal avına çıkılır. Kim oynuyor?</p>
@@ -7543,7 +7588,7 @@ window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS,
    önbelleğe hiç uğramadan soruyor; kendi numarasıyla uyuşmuyorsa bütün
    önbellekleri ve servis çalışanlarını silip bir kez yeniden yükleniyor.
    Döngüye girmesin diye tek seferlik bir işaret bırakıyor.               */
-const BUILD = '19.10.2026 15:30';
+const BUILD = '19.10.2026 15:51';
 /* Başlık ekranındaki damga elle yazılıyordu ve geride kalabiliyordu;
    artık yapı numarasının kendisinden yazılıyor.                          */
 { const el = document.getElementById('build'); if(el) el.textContent = 'sürüm ' + BUILD; }

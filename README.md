@@ -17,7 +17,10 @@ Oyun yalnızca dokunmatik oynanır; arayüzde klavye tuşu geçmez.
 - **Ekrana bir kez dokun:** zıpla
 - **Ekranı sürükle:** kamerayı çevir; iki parmak → yakınlaş
 - **Sağ alt:** dal, zıpla, fener, taş, çanta, Ali↔Alya ve büyük etkileşim tuşu (yakında bir yer varsa yanar)
-- Dikey ve yatay yerleşim ayrı ayrı tasarlandı; çentik/ev düğmesi güvenli alanları gözetilir
+- Dikey ve yatay yerleşim ayrı ayrı tasarlandı; çentik/ev düğmesi güvenli alanları gözetilir.
+  Telefon (360×800, 390×844, 412×915), küçük yatay (667×375), tablet (768×1024,
+  820×1180, 1180×820) ölçülerinde dikey ve yatay olarak ölçüldü: hiçbir parça
+  ekran dışında kalmıyor, HUD parçaları üst üste binmiyor, başlık kartı taşmıyor
 - Titreşimli geri bildirim, ekranı uyanık tutma, tam ekran düğmesi
 - iPhone'da **Paylaş → Ana Ekrana Ekle**, Android'de **Uygulamayı yükle** ile tam ekran kurulur
 - Masaüstü tarayıcıda da aynı dokunmatik yerleşim açılır (fareyle sürüklenir); eski
@@ -73,6 +76,14 @@ GitHub Pages'e yayınlanır (`.github/workflows/pages.yml`).
 kademesinden birinde kurulur: gölge çözünürlüğü, su ağı, ganimet yoğunluğu, serpinti,
 görüş mesafesi ve parıltı katmanı buna bağlı. Kare hızı düşerse kademe oyun sırasında
 kendiliğinden iner. Test için `?tier=0..3` ve `?desktop=1` parametreleri vardır.
+
+## Logo ve kurulum
+
+Simge SVG olarak çizildi, oradan 192 ve 512 piksel PNG'ye alındı: ay ışığının
+önünde çakal silüeti, altında ay vurmuş deniz. Android'in yuvarlak/kare maskesi
+kenarlardan kırptığı için maskeli sürüm ayrı üretildi — çizim güvenli alanın
+içinde duruyor. iOS için 180 piksellik ayrı bir dosya, tarayıcı sekmesi için
+keskin kalsın diye SVG var. Aynı işaret başlık kartının üstünde de duruyor.
 
 ## Varlıklar
 
