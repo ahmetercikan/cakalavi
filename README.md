@@ -143,10 +143,32 @@ omuz yok, boyun yok, yüz dokuya çizili. Yakın kamerada oyuncak gibi
 duruyordu. Hareket zaten burada prosedürel olduğu için paketten
 vazgeçildi; iki .glb dosyası ve doku atlası depodan çıktı.
 
-Yeni gövdelerin ölçüsü çocuk oranında, ayak tabanı sıfır kabul edilerek:
-kalça 0,60 — omuz 0,98 — çene 1,02 — tepe 1,31 metre. Uzuvlar omuzdan
-bileğe tek parça deri; iki kemiğe bağlı oldukları için dirsek ve diz
-kumaş gibi kıvrılıyor, eklemde geometri kırılmıyor.
+Oranlar bir ara oyun oranıydı: boy dört baş, iri kafa, kısa kalın
+uzuvlar. Silüet uzaktan iyi okunuyordu ama yakın kamerada oyuncak gibi
+duruyordu. Ölçüler gerçek bir çocuğunkine çekildi — boy 1,34 metre ve
+beş buçuk baş, bacak boyun yüzde 52'si. Ayak tabanı sıfır kabul
+edilerek: bilek 0,06 — diz 0,37 — kalça 0,70 — omuz 1,03 — çene 1,10 —
+tepe 1,34. Yetişkinler yedi buçuk baş, 1,70–1,75 metre.
+
+Uzuvlar omuzdan bileğe tek parça deri; iki kemiğe bağlı oldukları için
+dirsek ve diz kumaş gibi kıvrılıyor, eklemde geometri kırılmıyor. Deri
+boyunca iki tümsek var: üstte pazı ve uyluk kası, eklemin altında
+baldır ve ön kol — baldır ayrıca arkaya kayıyor, çünkü baldır kası
+bacağın arkasındadır. Köylüler kalıptan kopyalandığı için three.js'in
+paylaştırdığı iskelet kopyada yeniden bağlanıyor (`reskin`); yoksa
+yetmiş köylü tek bir kişinin hareketini tekrarlardı.
+
+Gövde tek yarıçap eğrisiyle çevrilmiş bir fıçıydı: her kesit daire,
+omuzdan kalçaya aynı oranda yuvarlak. İnsan gövdesinde kesit hiçbir
+yerde daire değil — göğüs yayvan, bel ince, kalça derin. `shapeZ`
+dönel yüzeyin her halkasını kendi derinliğine göre sıkıştırıyor ve
+öne-arkaya kaydırıyor; omurganın S kıvrımı buradan geliyor.
+
+Şort kalçayı saran kısa bir koniydi, paçası uyluğun üçte birinde
+bitiyordu: kumaş gibi değil iç çamaşırı gibi duruyordu. Gerçek şortun
+üç işareti var — paça dizin hemen üstünde biter, aşağı doğru genişler
+(bacağa yapışmaz) ve ağzında katlanmış bir bant vardır. Üçü de artık
+yerinde; paçalar uyluk kemiğine bağlı, yani bacakla birlikte dönüyor.
 
 Yüz çiziliyor, parçalardan kurulmuyor. Göz, kaş ve ağız bir süre küçük
 küre ve halkalardan yapıldı; küre kafatasının dışına taşınca profilden
@@ -160,17 +182,42 @@ Ali kıvırcık: saç, saç çizgisi boyunca dizilen yüz kırk küçük kümede
 tek geometride birleşiyor, her küme kendi ton farkını köşe renginde
 taşıyor. Kümeler önce bütün kafatasına serpiliyordu ve gözleri de
 kapatıyordu; saç çizgisi artık yöne göre değişiyor — önde kaşın hemen
-üstünde bitiyor, arkada enseye iniyor. Alya'nın katmanlı kısa saçı ve
-adım temposuyla sallanan at kuyruğu var.
+üstünde bitiyor, arkada enseye iniyor. Alya'nın kısa saçı ve adım temposuyla
+sallanan at kuyruğu var; kâkülü küre diliminden kesiliyordu ve alında
+cetvelle çizilmiş gibi düz bir çizgi bırakıyordu, şimdi alın hattı
+boyunca dizilen tutamlardan oluşuyor.
 
 Omuz çantası önce sırt çantasıydı: oyuncu karakteri neredeyse hep
 arkadan gördüğü için çanta bütün sırtı kapatıyor, kıyafet hiç
 görünmüyordu. Askı göğsü çaprazlıyor, kese kalçanın yanında duruyor.
 "File çanta" yükseltmesi alınınca diğer kalçaya ganimet filesi geliyor.
 
+Kafa tek küreydi: suratın alt yarısı tepesiyle aynı genişlikte
+kalıyordu. İnsan kafatası elmacık kemiğinden aşağı daralıp çeneye
+iner; köşe noktaları aşağı indikçe yanlardan sıkıştırılıyor ve çene
+biraz öne çıkıyor. Doku koordinatları değişmediği için yüz yerinde
+kalıyor.
+
 Köylüler de aynı elden geçti: kutu gövde ve kutu kafa yerine dönel
-profiller ve küreler. Baş hâlâ tek geometri — yetmiş köylü için çizim
-sayısı değişmedi.
+profiller, küreler ve tek parça uzuv derisi. Baş hâlâ tek geometri —
+yetmiş köylü için çizim sayısı değişmedi. Ayak küresinin altı bilek
+kotunun aşağısında kalıyordu, herkes tabanı toprağa gömülü
+yürüyordu; taban artık tam sıfırda. Pantolon paçası dizin üstünde
+bitiyor, altı ten rengi kalıyordu — paça ayak bileğine indi.
+
+Oturma pozunda uyluk eksi yöne döndürülüyordu: diz öne değil arkaya
+gidiyordu, sandalyeye ters binmiş gibi bir duruş çıkıyordu. Artı yön
+öne demek — uyluk öne yatıyor, baldır aşağı iniyor, ayaklar yere
+basıyor. Kumsalda oturanlar sandalye olmadığı için ayrı poz
+kullanıyor: kalça kumda, bacaklar öne uzanmış.
+
+Sokakta gezenler iki uç arasında düz çizgide yürüyordu; araya bina
+girince duvara dayanıp yanlamaya çalışıyor, köşede sıkışıp olduğu
+yerde adım sayıyordu. Artık yolun kendi çizgisi güzergâh: yol zaten
+binaların arasından geçtiği için duvara hiç değmiyorlar. Yine de bir
+sıkışma bekçisi var — iki saniye yürüyüp yerinden kımıldamayan bir
+sonraki noktaya geçiyor. Sokak hayvanları da bina içini hedef
+seçmiyor.
 
 HUD madalyonundaki ve başlık ekranındaki portreler aynı renklerle elle
 çiziliyor; madalyondaki çocukla koşan çocuk aynı kişi.
