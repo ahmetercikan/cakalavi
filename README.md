@@ -33,9 +33,54 @@ Oyun yalnızca dokunmatik oynanır; arayüzde klavye tuşu geçmez.
 - Masaüstü tarayıcıda da aynı dokunmatik yerleşim açılır (fareyle sürüklenir); eski
   masaüstü yerleşimi yalnızca test için `?desktop=1` ile görülebilir
 
+## Harita
+
+Harita Yalı / Şifne'nin (Çeşme, İzmir) 965 × 562 m'lik bir parçası. Köşe
+koordinatları `world.json` içindeki `meta.originLat/originLon` ile veriliyor —
+bu ikisi **haritanın ortası**, köşesi değil.
+
+**Yükselti.** EU-DEM 25 m + SRTM 30 m, 3 m'lik ızgaraya oturtulmuş. Veriyi
+bağımsız olarak kontrol ettim: 3705 örnek noktada EU-DEM ile karşılaştırınca
+r = 0,997 ve ortalama sapma 0,33 m çıkıyor, yani arazi gerçekten ölçülmüş
+araziyle aynı. Deniz 0'ın altında, en yüksek nokta 24 m.
+
+**Yollar.** OpenStreetMap'ten alınıyor, sokak adları Google Haritalar ve
+Street View tabelalarıyla doğrulandı: 48 adlı sokak, 12,6 km, kaldırım ve
+merdivenler dahil. Önceki çizim hatalıydı — Street View kamera konumları
+yolun üstünde olduğu için ölçüt kabul edilebilir, panoramaların OSM yoluna
+uzaklığı ortalama **1,5 m**, eski çizime **8,2 m**. Eski katman ayrıca kendi
+içinde ikiz çizilmişti: 20,5 km'lik uzunluğun 16,4 km'si başka bir yolun
+6 m yakınında duruyordu. OSM'in görmediği parçalar (haritanın doğu ucu,
+Ak Turizm çevresi) eski veriden 10,5 m geri kaydırılarak eklendi.
+
+**Sokak eğimi.** Kaplamanın kotu motorda "kesitin iki kenarından yüksek
+olanı" diye bulunuyor. Eğimi enlemesine kesen bir sokakta bu, kaplamayı
+alçak kenarın üstünde bırakıp kaldırımı duvara çeviriyordu; kavşakta da iki
+yol ayrı kota oturup aralarında basamak kalıyordu. Çözüm arazide: her yolun
+boy kesiti DEM'den okunup 10 m'lik bir çekirdekle yumuşatılıyor, sonra yolun
+altındaki ve iki yanındaki iki metrelik şerit tam olarak o kota eşitlenip
+dokuz metrede DEM'e dönülüyor. Kıyı bandı dokunulmuyor — yoksa plajın
+arkasında yapay bir set oluşuyor. Çıkan eğimler: en dik **6158. Sk. %13,5**,
+sonra 6165 %13,2 ve 6160/1 %12,2; içerideki 6317 ve 6314 neredeyse düz.
+Yürüyüş hızı eğime bağlı: yokuş yukarı yavaşlıyor, aşağı azıcık hızlanıyor.
+
+**Binalar.** 414 bina, OSM taban alanlarından en küçük alanlı yönlü
+dikdörtgenle çıkarıldı: ortalama taban 162 m², eskiden 226 m²'ydi, yani
+evler fazla iriydi. Yolların yerine oturmasıyla birlikte yol koridoruna
+giren bina oranı %42'den %13'e indi. Çatılar kiremit kırma — uydu
+görüntüsünde Ak Turizm'in uzun sıra evleri de kiremit, o yüzden "apartman"
+etiketli olsalar da düz çatı verilmiyor.
+
+**Sahadan gelen düzeltmeler.** Street View'da yaya olarak gezilen sokaklardan:
+sahil yolu (6155/1. Sk.) baştan sona parke, ortasında kiremit şerit, denizle
+arasında kuru ot bandı var; ara sokaklar da parke, asfalt yok; bahçeler moloz
+taş istinat duvarı, beyaz sıvalı korkuluklu duvar ve boy hizasında çit ile
+çevrili. "Delil Doktorlar Sitesi" tabelada **Delfi Doktorlar Sitesi**.
+Edibe ile Sadık'ın evi gerçekte 6182. (Keklik) Sokak'ta.
+
 ## İçerik
 
-- Kıyı şeridi, sokaklar, binalar, havuzlar ve ağaçlar uydu görüntüsünden çıkarıldı;
+- Kıyı şeridi, deniz tabanı ve ağaç örtüsü uydu görüntüsünden çıkarıldı;
   deniz tabanı kum / deniz çayırı / kayalık olarak sınıflandırıldı
 - 9 çeşit ganimet (kabuk, salyangoz, mineralli taş, parlak mineral, deniz camı ve
   delik otel terliği gibi dört "çöp ganimet"), çanta, para, iki satış noktası, 6 geliştirme

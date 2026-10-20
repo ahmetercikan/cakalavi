@@ -1811,7 +1811,7 @@ function sideNormals(pts){
   return nn;
 }
 /* iki yanal ofset arasında, araziyi izleyen yatay şerit */
-function strip(pts, nn, o0, o1, lift, P_, C_, I_, color, jitter){
+function strip(pts, nn, o0, o1, lift, P_, C_, I_, color, jitter, mask){
   const base = P_.length/3, n = pts.length;
   for(let i = 0; i < n; i++){
     const p = pts[i], nx = nn[i][0], nz = nn[i][1];
@@ -1823,12 +1823,13 @@ function strip(pts, nn, o0, o1, lift, P_, C_, I_, color, jitter){
     C_.push(color.r*s, color.g*s, color.b*s, color.r*s, color.g*s, color.b*s);
   }
   for(let i = 0; i < n-1; i++){
+    if(mask && (mask[i] || mask[i+1])) continue;
     const a = base+i*2, b = a+1, c = a+2, d = a+3;
     I_.push(a, c, b, b, c, d);
   }
 }
 /* kenarda aşağı inen dikey perde — kaplamanın altında boşluk görünmesin */
-function curtain(pts, nn, off, topLift, depth, P_, C_, I_, color){
+function curtain(pts, nn, off, topLift, depth, P_, C_, I_, color, mask){
   const base = P_.length/3, n = pts.length;
   for(let i = 0; i < n; i++){
     const p = pts[i], x = p[0] + nn[i][0]*off, z = p[1] + nn[i][1]*off;
@@ -1837,6 +1838,7 @@ function curtain(pts, nn, off, topLift, depth, P_, C_, I_, color){
     C_.push(color.r, color.g, color.b, color.r*0.72, color.g*0.72, color.b*0.72);
   }
   for(let i = 0; i < n-1; i++){
+    if(mask && (mask[i] || mask[i+1])) continue;
     const a = base+i*2, b = a+1, c = a+2, d = a+3;
     I_.push(a, c, b, b, c, d);
   }
@@ -1853,7 +1855,46 @@ const kP = [], kC = [], kI = [];
 const streetGroups = new Map();
 const lampSpots = [];
 
-for(const r of W.roads){
+/* Kavşakta bordür sorunu: her yol bordürünü baştan sona çiziyordu, iki
+   sokak kesiştiğinde taş kesişmenin ortasından geçip 17 cm'lik bir
+   basamak bırakıyordu — meydan şantiyeye dönüyordu. Yolların merkez
+   çizgileri önce bir ızgaraya işleniyor; bir bordür noktası başka bir
+   yolun kaplamasının içine düşerse o parça çizilmiyor.                 */
+const RCELL = 10;
+const roadCells = new Map();
+for(let ri = 0; ri < W.roads.length; ri++){
+  const r = W.roads[ri];
+  const hwr = Math.max(3.0, r.width * S)/2;
+  const raw = r.pts.map(p => [px2x(p[0]), pz2z(p[1])]);
+  for(let i = 0; i < raw.length-1; i++){
+    const L = Math.hypot(raw[i+1][0]-raw[i][0], raw[i+1][1]-raw[i][1]);
+    const n = Math.max(1, Math.ceil(L/2.0));
+    for(let k = 0; k <= n; k++){
+      const x = raw[i][0] + (raw[i+1][0]-raw[i][0])*k/n;
+      const z = raw[i][1] + (raw[i+1][1]-raw[i][1])*k/n;
+      const key = Math.floor(x/RCELL) + ',' + Math.floor(z/RCELL);
+      let a = roadCells.get(key);
+      if(!a) roadCells.set(key, a = []);
+      a.push(x, z, hwr, ri);
+    }
+  }
+}
+function onOtherRoad(x, z, self, pad){
+  const ci = Math.floor(x/RCELL), cj = Math.floor(z/RCELL);
+  for(let a = -1; a <= 1; a++) for(let b = -1; b <= 1; b++){
+    const arr = roadCells.get((ci+a) + ',' + (cj+b));
+    if(!arr) continue;
+    for(let t = 0; t < arr.length; t += 4){
+      if(arr[t+3] === self) continue;
+      const dx = x - arr[t], dz = z - arr[t+1], rr = arr[t+2] + pad;
+      if(dx*dx + dz*dz < rr*rr) return true;
+    }
+  }
+  return false;
+}
+
+for(let ri = 0; ri < W.roads.length; ri++){
+  const r = W.roads[ri];
   const raw = r.pts.map(p => [px2x(p[0]), pz2z(p[1])]);
   if(raw.length < 2) continue;
   const pts = resample(raw, tier <= 1 ? 3.2 : 2.2);
@@ -1861,6 +1902,7 @@ for(const r of W.roads){
   const wm = Math.max(3.0, r.width * S);
   const hw = wm/2;
   const wide = wm > 5.6;
+  const foot = r.class === 'walk';          /* yaya yolu: bordürsüz */
 
   /* kaplama */
   strip(pts, nn, -hw, hw, 0.055, rP, rC, rI, C_PAVER, true);
@@ -1869,12 +1911,14 @@ for(const r of W.roads){
   /* bordür + toprağa inen etek (zayıf cihazda sadece etek) */
   for(const sgn of [-1, 1]){
     const o = sgn*hw, ow = o + sgn*(wide ? 0.6 : 0.35);
-    if(tier >= 1){
-      strip(pts, nn, o, ow, 0.17, kP, kC, kI, C_KERB, false);
-      curtain(pts, nn, o, 0.17, 0.16, kP, kC, kI, C_EDGE);
-      curtain(pts, nn, ow, 0.17, 0.75, kP, kC, kI, C_WALL);
+    const msk = pts.map((p, i) =>
+      onOtherRoad(p[0] + nn[i][0]*ow, p[1] + nn[i][1]*ow, ri, 0.9));
+    if(tier >= 1 && !foot){
+      strip(pts, nn, o, ow, 0.17, kP, kC, kI, C_KERB, false, msk);
+      curtain(pts, nn, o, 0.17, 0.16, kP, kC, kI, C_EDGE, msk);
+      curtain(pts, nn, ow, 0.17, 0.75, kP, kC, kI, C_WALL, msk);
     } else {
-      curtain(pts, nn, o, 0.06, 0.7, kP, kC, kI, C_WALL);
+      curtain(pts, nn, o, 0.06, foot ? 0.35 : 0.7, kP, kC, kI, C_WALL, msk);
     }
   }
 
@@ -4479,12 +4523,15 @@ const SPOTS = [];
    etkileşim balonunda çıkıyor                                            */
 
 /* ---------- oyuncu, arkadaş, düşmanlar, çakallar ---------- */
-const HOME = [px2x(648), pz2z(648)];
+/* Ev ve düşman evi artık sabit piksel değil: harita OSM ölçümüne
+   oturtulunca eski nokta bir evin içine düştü. freeSpot en yakın
+   boş yeri buluyor, yani yeni bir harita da onları içeri almıyor.   */
+const HOME = freeSpot(630, 663, 26);
 const P = { x:HOME[0], z:HOME[1], y:terrainH(HOME[0], HOME[1]), face:2.6, vy:0, onGround:true,
             spd:0, swim:false, dive:false, depth:0 };
 const MATE = { x:P.x + 1.6, z:P.z + 1.2, y:P.y, face:2.6, spd:0, swim:false, say:0 };
 
-const ENEMY_HOME = [px2x(441), pz2z(318)];
+const ENEMY_HOME = freeSpot(417, 332, 20);
 const NPC = [
   { o:edibe, name:'Edibe', x:ENEMY_HOME[0] - 4, z:ENEMY_HOME[1] + 3, y:0, face:0, spd:0,
     state:'home', t:0, swing:0, cd:0, see:30, run:5.4, thr:0 },
@@ -6692,6 +6739,15 @@ function updatePlayer(dt, t){
   const dl = Math.hypot(dx, dz);
   if(dl > 0.001){
     dx /= dl; dz /= dl;
+    /* Yokuş: Yalı'nın sokakları denize doğru %13'e varan eğimle iniyor.
+       Eğim ölçülüp oyuna konduysa yürüyüşte de duyulmalı — yukarı çıkış
+       yavaşlar, iniş azıcık hızlanır. Bir metre ilerideki kot farkı
+       doğrudan teğet veriyor.                                          */
+    if(!P.swim && P.onGround){
+      const sl = (groundAt(P.x + dx*1.2, P.z + dz*1.2) - ground)/1.2;
+      sp *= sl > 0 ? 1/(1 + Math.min(sl, 0.5)*2.2)
+                   : 1 + Math.min(0.16, -sl*0.8);
+    }
     slide(P, dx*sp*amt*dt, dz*sp*amt*dt);
     const want = Math.atan2(-dx, -dz);
     let diff = ((want - P.face + Math.PI*3) % (Math.PI*2)) - Math.PI;
@@ -8358,7 +8414,7 @@ window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS,
    önbelleğe hiç uğramadan soruyor; kendi numarasıyla uyuşmuyorsa bütün
    önbellekleri ve servis çalışanlarını silip bir kez yeniden yükleniyor.
    Döngüye girmesin diye tek seferlik bir işaret bırakıyor.               */
-const BUILD = '20.10.2026 09:40';
+const BUILD = '20.10.2026 14:05';
 /* Başlık ekranındaki damga elle yazılıyordu ve geride kalabiliyordu;
    artık yapı numarasının kendisinden yazılıyor.                          */
 { const el = document.getElementById('build'); if(el) el.textContent = 'sürüm ' + BUILD; }
