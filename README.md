@@ -71,6 +71,39 @@ giren bina oranı %42'den %13'e indi. Çatılar kiremit kırma — uydu
 görüntüsünde Ak Turizm'in uzun sıra evleri de kiremit, o yüzden "apartman"
 etiketli olsalar da düz çatı verilmiyor.
 
+**Zemin örtüsü ve ağaçlar.** Köy oyunda uçsuz bucaksız kum gibi
+duruyordu; gerçekte Yalı yemyeşil. Esri World Imagery'nin z18 karesi
+(0,47 m/piksel) tarayıcıda indirilip piksel piksel sınıflandırıldı:
+normalize edilmiş fazla-yeşil göstergesi (2g−r−b) ağaç tacını otluktan,
+parlaklık da sert zeminden ayırıyor, kiremit çatı kendi kırmızı oranıyla
+eleniyor. Kara hücrelerin **%40'ı ağaç altı, %26'sı bahçe ve ot,
+%34'ü sert ve açık zemin** çıktı — eski veride neredeyse her yer taşlıktı,
+serpinti de buna bakıp çakıl döküyordu. Ağaçlar aynı tepe örtüsünden
+çıkarıldı: tepe yoğunluğunun yerel en yükseklerine taç genişliği kadar
+aralıkla ağaç kondu, 1.434 yerine **3.422 ağaç**. Ağaç kaydına dördüncü
+alan olarak tür eklendi (0 zeytin/maki · 1 fıstık çamı · 2 palmiye);
+eskiden tür boy çarpanından türetiliyordu ve uydudan gelen taç boyutu
+doğrudan boy sanılınca yirmi metrelik, gövdesi iki metre kalın ağaçlar
+çıkıyordu. Çamın silueti de iki sivri koniden yayvan tepeli fıstık çamına
+çevrildi. Yoğunluk kare hızını 60'tan 44'e düşürünce ucuz ayrıntı
+kademesinden gölge atma kaldırıldı; oyuncunun çevresindeki öbekler zaten
+model kademesine geçiyor ve gölgeyi onlar veriyor.
+
+**Yol genişlikleri.** Vektör katmanı uydu karesinin üstüne bindirilip
+ölçüldü: mahalle sokağının kaplaması 4,5–5 m, servis yolu 3,5 m. Önceki
+6 m'lik sokak kaplamayı bahçelere taşırıyor, üç sokağın buluştuğu yeri de
+meydana çeviriyordu. Yollar ayrıca arazi ızgarasının bittiği yerde
+kırpılıyor — taşan uç, haritanın güney kenarında havada duran beyaz bir
+levha gibi görünüyordu.
+
+**Bahçe duvarları.** Duvar, binanın merkezinden en yakın yol **köşe
+noktasına** doğru kuruluyordu. Yollar OSM'den gelince düz bir sokak iki
+köşe noktasıyla geçilir oldu: en yakın köşe yüz metre öteye düştü, duvar
+da çapraz bir yöne, çoğu zaman sokağın ortasına dikildi — sokaklarda
+ortada duran beyaz bloklar bunlardı. Çizgiler artık iki metrede bir
+örnekleniyor, duvar binanın sokağa bakan cephesine paralel kuruluyor,
+araziyi parça parça izliyor ve kaplamaya giriyorsa hiç kurulmuyor.
+
 **Sahadan gelen düzeltmeler.** Street View'da yaya olarak gezilen sokaklardan:
 sahil yolu (6155/1. Sk.) baştan sona parke, ortasında kiremit şerit, denizle
 arasında kuru ot bandı var; ara sokaklar da parke, asfalt yok; bahçeler moloz

@@ -1452,12 +1452,14 @@ function refreshEnv(){
    0 kuru maki · 1 taş/yapı · 2 sulanan bahçe · 3 ağaç altı · 4 çatı · 5 deniz tabanı */
 step(.2, 'Zemin örtüsü seriliyor…');
 
+/* 0 kum · 1 sert ve açık (beton, parke, kuru toprak) · 2 bahçe ve ot
+   3 ağaç altı · 4 kuru ot · 5 maki — sınıflar uydudan okunuyor      */
 const COV = [
   new THREE.Color(0xc9b082),
   new THREE.Color(0xc3bdac),
   new THREE.Color(0x8d9c5e),
-  new THREE.Color(0x6d7a46),
-  new THREE.Color(0xc3bdac),
+  new THREE.Color(0x66803f),
+  new THREE.Color(0xbdb184),
   new THREE.Color(0xa8ad86),
 ];
 const C_SAND = new THREE.Color(0xdfcca2);
@@ -2083,36 +2085,76 @@ for(const b of W.buildings){
                       flat:b.roof === 'flat', alongX:alongXout, ridgeLen, wallCol:wall });
 }
 
-/* bahçe duvarları — sokağa bakan cephe */
+/* bahçe duvarları — sokağa bakan cephe
+   Duvar, binanın merkezinden en yakın yol KÖŞE NOKTASINA doğru
+   kuruluyordu. Yol çizgileri OSM'den gelince düz bir sokak iki köşe
+   noktasıyla geçilir oldu: en yakın köşe yüz metre öteye düşüyor, duvar
+   da çapraz bir yöne, çoğu zaman sokağın ortasına dikiliyordu — ortada
+   duran beyaz bloklar bunlardı. Çizgiler artık iki metrede bir
+   örnekleniyor, duvar binanın sokağa bakan cephesine paralel kuruluyor,
+   araziyi parça parça izliyor ve kaplamaya giriyorsa hiç kurulmuyor.   */
 const roadPts = [];
-for(const r of W.roads) for(const p of r.pts) roadPts.push([px2x(p[0]), pz2z(p[1])]);
+for(const r of W.roads){
+  const hwr = Math.max(3.0, r.width * S)/2;
+  for(let i = 0; i < r.pts.length-1; i++){
+    const a0 = [px2x(r.pts[i][0]), pz2z(r.pts[i][1])];
+    const b0 = [px2x(r.pts[i+1][0]), pz2z(r.pts[i+1][1])];
+    const L = Math.hypot(b0[0]-a0[0], b0[1]-a0[1]);
+    const n = Math.max(1, Math.ceil(L/2.0));
+    for(let k = 0; k <= n; k++)
+      roadPts.push([a0[0] + (b0[0]-a0[0])*k/n, a0[1] + (b0[1]-a0[1])*k/n, hwr]);
+  }
+}
 const C_GWALL = new THREE.Color(0xe4dac2), C_GSTONE = new THREE.Color(0xa99b85);
+const nearRoadDist = (x, z) => {
+  let m = 1e9;
+  for(const rp of roadPts){
+    const d = Math.hypot(x-rp[0], z-rp[1]) - rp[2];
+    if(d < m) m = d;
+  }
+  return m;
+};
 for(const b of buildingList){
   let best = null, bd2 = 1e9;
   for(const rp of roadPts){
     const d = (rp[0]-b.cx)**2 + (rp[1]-b.cz)**2;
     if(d < bd2){ bd2 = d; best = rp; }
   }
-  if(!best || bd2 > 44*44) continue;
+  if(!best || bd2 > 34*34) continue;
   const dist0 = Math.sqrt(bd2);
-  const dx = (best[0]-b.cx)/dist0, dz = (best[1]-b.cz)/dist0;
-  b.doorDir = [dx, dz];
-  const off = Math.min(dist0 - 2.6, Math.max(b.bw, b.bd)/2 + 3.4);
-  if(off < 3) continue;
-  const mx = b.cx + dx*off, mz = b.cz + dz*off;
-  const len = Math.min(b.bw, b.bd) * 1.15;
-  const px_ = -dz, pz_ = dx;
-  const h0 = terrainH(mx, mz);
-  const a = [mx - px_*len/2, mz - pz_*len/2], c2 = [mx + px_*len/2, mz + pz_*len/2];
-  const th = 0.28;
-  for(const [col, yb, yt] of [[C_GSTONE, h0-1.4, h0+0.55], [C_GWALL, h0+0.55, h0+1.05]]){
-    for(const s of [-1, 1]){
-      const p = [a[0] + dx*th*s, a[1] + dz*th*s], q = [c2[0] + dx*th*s, c2[1] + dz*th*s];
-      pushQuad(wallP, wallC, wallI, [p[0],yb,p[1]], [q[0],yb,q[1]], [q[0],yt,q[1]], [p[0],yt,p[1]], col);
+  const ux = (best[0]-b.cx)/dist0, uz = (best[1]-b.cz)/dist0;
+  /* yola en çok bakan cephe: duvar ona paralel durur */
+  const ca = Math.cos(b.ang), sa = Math.sin(b.ang);
+  const faces = [[ca, sa, b.bw/2, b.bd], [-ca, -sa, b.bw/2, b.bd],
+                 [-sa, ca, b.bd/2, b.bw], [sa, -ca, b.bd/2, b.bw]];
+  let f = faces[0], fb = -2;
+  for(const q of faces){ const dot = q[0]*ux + q[1]*uz; if(dot > fb){ fb = dot; f = q; } }
+  const nx = f[0], nz = f[1], px_ = -nz, pz_ = nx;
+  b.doorDir = [nx, nz];
+  const off = Math.min(f[2] + 3.0, dist0 - (best[2] + 1.0));
+  if(off < f[2] + 0.9) continue;                 /* bahçe payı yok */
+  const half = f[3]*0.46;
+  const mx = b.cx + nx*off, mz = b.cz + nz*off;
+  const SEG = 5, th = 0.26;
+  const line = [];
+  for(let k = 0; k <= SEG; k++){
+    const t = k/SEG - 0.5;
+    line.push([mx + px_*half*2*t, mz + pz_*half*2*t]);
+  }
+  if(line.some(q => nearRoadDist(q[0], q[1]) < 0.6)) continue;
+  const hs = line.map(q => terrainH(q[0], q[1]));
+  for(let k = 0; k < SEG; k++){
+    const p = line[k], q = line[k+1], hp = hs[k], hq = hs[k+1];
+    for(const [col, lo, hi] of [[C_GSTONE, -1.4, 0.55], [C_GWALL, 0.55, 1.05]]){
+      for(const sg of [-1, 1]){
+        const a1 = [p[0] + nx*th*sg, p[1] + nz*th*sg], b1 = [q[0] + nx*th*sg, q[1] + nz*th*sg];
+        pushQuad(wallP, wallC, wallI, [a1[0], hp+lo, a1[1]], [b1[0], hq+lo, b1[1]],
+                 [b1[0], hq+hi, b1[1]], [a1[0], hp+hi, a1[1]], col);
+      }
     }
     pushQuad(wallP, wallC, wallI,
-      [a[0]-dx*th, yt, a[1]-dz*th], [c2[0]-dx*th, yt, c2[1]-dz*th],
-      [c2[0]+dx*th, yt, c2[1]+dz*th], [a[0]+dx*th, yt, a[1]+dz*th], col);
+      [p[0]-nx*th, hp+1.05, p[1]-nz*th], [q[0]-nx*th, hq+1.05, q[1]-nz*th],
+      [q[0]+nx*th, hq+1.05, q[1]+nz*th], [p[0]+nx*th, hp+1.05, p[1]+nz*th], C_GWALL);
   }
 }
 
@@ -2264,11 +2306,14 @@ for(const p of W.pools){
 /* ---------------- ağaçlar: uydudan gerçek konum ve tepe çapı ---------------- */
 step(.72, 'Çamlar ve zeytinler dikiliyor…');
 
+/* Çeşme'nin çamı fıstık çamı: gövde uzun ve çıplak, tepe yayvan, üstü
+   neredeyse düz. İki sivri koniden oluşan ladin silueti buraya ait
+   değildi — uzaktan köy çam ormanı değil, kozalak tarlası gibi duruyordu. */
 const pineGeo = (() => {
-  const t = new THREE.CylinderGeometry(0.1, 0.16, 2.4, 6); t.translate(0, 1.2, 0);
-  const c1 = new THREE.ConeGeometry(1.0, 2.3, 9); c1.translate(0, 2.9, 0);
-  const c2 = new THREE.ConeGeometry(0.72, 1.8, 9); c2.translate(0, 3.9, 0);
-  return mergeSimple([t, c1, c2], [new THREE.Color(0x6b5236), new THREE.Color(0x3d6438), new THREE.Color(0x4a7442)]);
+  const t = new THREE.CylinderGeometry(0.1, 0.17, 3.0, 6); t.translate(0, 1.5, 0);
+  const c1 = new THREE.ConeGeometry(1.46, 1.05, 10); c1.translate(0, 3.42, 0);
+  const c2 = new THREE.ConeGeometry(1.02, 0.82, 9);  c2.translate(0, 4.02, 0);
+  return mergeSimple([t, c1, c2], [new THREE.Color(0x7a6244), new THREE.Color(0x3d6438), new THREE.Color(0x4a7442)]);
 })();
 const oliveGeo = (() => {
   const t = new THREE.CylinderGeometry(0.13, 0.2, 1.5, 6); t.translate(0, 0.75, 0);
@@ -2314,12 +2359,21 @@ function fitTo(g, ref){
   return g;
 }
 const buckets = new Map();
+/* Ağaç kaydı [px, py, boy çarpanı, tür]. Tür eskiden boydan türetiliyordu
+   (r>=3,4 ise çam); uydudan çıkarılan tepe örtüsünde boy ile tür ayrı
+   şeyler olduğu için dördüncü alana taşındı. Dört alanı olmayan eski
+   kayıtlar eski kuralla okunuyor.                                      */
+const TKIND = ['olive', 'pine', 'palm'];
 for(const t of W.trees){
   const x = px2x(t[0]), z = pz2z(t[1]), r = t[2];
   if(blocked(blockBld, x, z)) continue;
   const h = terrainH(x, z);
-  let kind = r >= 3.4 ? 'pine' : 'olive';
-  if(h < 4 && r >= 2.2 && r < 4 && rand() < 0.18) kind = 'palm';
+  let kind;
+  if(t.length > 3) kind = TKIND[t[3]] || 'olive';
+  else {
+    kind = r >= 3.4 ? 'pine' : 'olive';
+    if(h < 4 && r >= 2.2 && r < 4 && rand() < 0.18) kind = 'palm';
+  }
   const key = kind + '|' + Math.floor(x/TCHUNK) + '|' + Math.floor(z/TCHUNK);
   let arr = buckets.get(key);
   if(!arr){ arr = []; buckets.set(key, arr); }
@@ -2334,7 +2388,11 @@ const treeLods = [];
 for(const [key, list] of buckets){
   const kind = key.split('|')[0];
   const im = new THREE.InstancedMesh(GEOS[kind], treeMat, list.length);
-  im.castShadow = im.receiveShadow = true;
+  /* Uydudan çıkarılan ağaç sayısı 1.434'ten 4.000'e çıkınca gölge geçişi
+     kare hızını 60'tan 44'e düşürdü. Ucuz kademe artık gölge atmıyor;
+     oyuncunun çevresindeki öbekler zaten model kademesine geçiyor ve
+     gölgeyi onlar veriyor.                                              */
+  im.castShadow = false; im.receiveShadow = true;
   const mg = MODELGEO[kind];
   const lm = mg ? new THREE.InstancedMesh(mg, treeMat, list.length) : null;
   if(lm){ lm.castShadow = lm.receiveShadow = true; lm.visible = false; }
@@ -8414,7 +8472,7 @@ window.__denizkent = { GS, P, MATE, JACK, NPC, SPOTS, loot, KIDS, ITEMS, QUESTS,
    önbelleğe hiç uğramadan soruyor; kendi numarasıyla uyuşmuyorsa bütün
    önbellekleri ve servis çalışanlarını silip bir kez yeniden yükleniyor.
    Döngüye girmesin diye tek seferlik bir işaret bırakıyor.               */
-const BUILD = '20.10.2026 14:05';
+const BUILD = '20.10.2026 16:40';
 /* Başlık ekranındaki damga elle yazılıyordu ve geride kalabiliyordu;
    artık yapı numarasının kendisinden yazılıyor.                          */
 { const el = document.getElementById('build'); if(el) el.textContent = 'sürüm ' + BUILD; }
